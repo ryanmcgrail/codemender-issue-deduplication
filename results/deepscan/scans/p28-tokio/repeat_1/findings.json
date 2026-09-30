@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "05a4dc2f-6d85-5af8-87c4-dcd2e84fb100",
+    "session_id": "ChAxYWY3NDUwNDE4ZTFmOTcyEAgaATAqBG1haW4",
+    "title": "Data Race and Memory Corruption via Unsynchronized Lazy Initialization in Sync TimerEntry",
+    "file_path": "/home/jfplante_google_com/repos/p28-tokio_rep1/tokio/src/runtime/time/entry.rs",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "**Data Path**:\n- **Source**: User code sharing a `tokio::time::Sleep` future across multiple threads (e.g., via `Arc\u003ctokio::time::Sleep\u003e`), which is permitted by safe Rust because `Sleep` implements `Sync` (derived from `TimerEntry`'s `unsafe impl Sync`).\n- **Sanitization/Validation**: Rust's type system relies on `Sync` guarantees to prevent data races. However, `TimerEntry` implements `unsafe impl Sync for TimerEntry {}` even though it contains an unsynchronized `inner: StdUnsafeCell\u003cOption\u003cTimerShared\u003e\u003e`. Furthermore, `TimerEntry::inner(\u0026self)` performs lazy initialization across an immutable reference (`\u0026self`) without any atomic synchronization or locking, and violates Rust's aliasing rules by writing into the `UnsafeCell` while an immutable reference `inner` to its contents exists.\n- **Sink**: The unsafe mutation `*self.inner.get() = Some(...)` inside `inner(\u0026self)` at lines 499-501 and the subsequent `inner.as_ref().unwrap()` at line 503. When multiple threads concurrently invoke `inner(\u0026self)` (for example via `Sleep::is_elapsed` or polling), a concurrent write occurs on `StdUnsafeCell`, causing a data race, memory corruption of `TimerShared` and its intrusive linked list pointers, and undefined behavior.\n\n**Conceptual Exploit Payload / Reproduction Code**:\n```rust\nuse std::sync::Arc;\nuse std::time::Duration;\n\n#[tokio::main]\nasync fn main() {\n    let sleep = Arc::new(tokio::time::sleep(Duration::from_secs(60)));\n    let s1 = sleep.clone();\n    let handle1 = std::thread::spawn(move || {\n        s1.is_elapsed();\n    });\n    let s2 = sleep.clone();\n    let handle2 = std::thread::spawn(move || {\n        s2.is_elapsed();\n    });\n    handle1.join().unwrap();\n    handle2.join().unwrap();\n}\n```\nWhen executed concurrently, both threads enter `inner(\u0026self)`, observe `inner.is_none()`, and concurrently write to `*self.inner.get()`, resulting in a data race on `UnsafeCell`, intrusive pointer corruption in `TimerShared`, and undefined behavior.",
+    "snippet": "    fn inner(\u0026self) -\u003e \u0026TimerShared {\n        let inner = unsafe { \u0026*self.inner.get() };\n        if inner.is_none() {\n            let shard_size = self.driver.driver().time().inner.get_shard_size();\n            let shard_id = generate_shard_id(shard_size);\n            unsafe {\n                *self.inner.get() = Some(TimerShared::new(shard_id));\n            }\n        }\n        return inner.as_ref().unwrap();\n    }",
+    "vuln_type": "CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition')",
+    "vuln_id": "CWE-362",
+    "status": "OPEN",
+    "start_line": 494,
+    "end_line": 504
+  }
+]

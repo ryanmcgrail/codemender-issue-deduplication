@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "8c2d6ef9-5f99-5e31-a414-9bb48e25a9e9",
+    "session_id": "ChA3ZWVjZmZkYjNhMzc4YmJlEAgaATAqBG1haW4",
+    "title": "Insecure Deserialization in ObjectDecoder",
+    "file_path": "/home/jfplante_google_com/repos/p23-netty_rep1/codec/src/main/java/io/netty/handler/codec/serialization/ObjectDecoder.java",
+    "severity": "CRITICAL",
+    "confidence": 90,
+    "analysis": "### Vulnerability Analysis\n\n**Source**:\nUntrusted network input is received via the `decode(ChannelHandlerContext ctx, ByteBuf in)` method of `ObjectDecoder`, which reads incoming network bytes from the `ByteBuf` frame.\n\n**Sanitization / Validation**:\nThere is no validation, allowlist filtering, or sanitization performed on the class types being deserialized. The decoder creates a `CompactObjectInputStream` backed by a `ClassResolver`. The standard `ClassResolver` implementations (such as `ClassLoaderClassResolver`) resolve any class name present on the application's classpath using `ClassLoader.loadClass()` or `Class.forName()`.\n\n**Sink**:\nThe untrusted input stream is deserialized at line 87: `return ois.readObject()`. Because Java native deserialization executes arbitrary object graphs and can trigger gadget chains present on the classpath, an attacker can achieve arbitrary remote code execution.\n\n### Conceptual Exploit Payload\nAn attacker establishes a TCP connection to a Netty server configured with `ObjectDecoder` in its channel pipeline and sends the following framed byte sequence:\n1. 4 bytes (Big-Endian integer) representing the length of the following payload.\n2. 1 byte stream version indicator: `0x05` (matching `CompactObjectInputStream.STREAM_VERSION`).\n3. Compact serialized object stream embedding a known Java deserialization gadget chain (e.g., standard ysoserial payload formatted for compact descriptors like `CommonsCollections` or Spring framework gadgets executing `Runtime.getRuntime().exec(\"id\")`).\n\nWhen `ObjectDecoder.decode` executes `ois.readObject()`, the gadget chain is deserialized and triggers arbitrary code execution on the server.",
+    "snippet": "        ObjectInputStream ois = new CompactObjectInputStream(new ByteBufInputStream(frame, true), classResolver);\n        try {\n            return ois.readObject();\n        } finally {\n            ois.close();\n        }",
+    "vuln_type": "Insecure Deserialization",
+    "vuln_id": "CWE-502",
+    "status": "OPEN",
+    "start_line": 85,
+    "end_line": 90
+  },
+  {
+    "finding_id": "e2ab9528-cf83-54b9-b596-8bfad682b742",
+    "session_id": "ChA3NGM0ZWI0NTM2ZjQ4NTYyEAgaATAqBG1haW4",
+    "title": "Path Traversal in StompWebSocketClientPageHandler allows Arbitrary Classpath Resource Disclosure",
+    "file_path": "/home/jfplante_google_com/repos/p23-netty_rep1/example/src/main/java/io/netty/example/stomp/websocket/StompWebSocketClientPageHandler.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "Data Flow Analysis:\n1. Source: Untrusted HTTP request URI `request.uri()` received by `StompWebSocketClientPageHandler.channelRead0` (line 66) is passed to `sendResource(request, ctx)` (line 76).\n2. Sanitization/Validation: In `sendResource`, the only check performed on `request.uri()` is `if (request.uri().isEmpty() || !request.uri().startsWith(\"/\")) return false;` (lines 77-79). The leading slash is stripped via `request.uri().substring(1)` (line 81). No sanitization or validation is performed against path traversal sequences (such as `../`) or arbitrary classpath resource access (such as `//` leading to an absolute classpath lookup via `Class.getResource()`).\n3. Sink: `INSTANCE.getClass().getResource(requestResource)` resolves the resource URL, which is then opened with `new RandomAccessFile(resourceUrl.getFile(), \"r\")` (line 94) and served to the client via `new DefaultFileRegion(raf.getChannel(), 0, fileLength)` (line 126).\n4. Reachability: Any client sending an HTTP GET request to the StompWebSocketChatServer without websocket upgrade headers reaches this handler.\n\nConceptual Exploit Payload:\nSending an HTTP request with path traversal or absolute classpath lookup allows an attacker to download arbitrary classpath resources (e.g., class bytecode, configuration files, credentials) from the server:\n```http\nGET //logback.xml HTTP/1.1\nHost: 127.0.0.1:8080\n\n```\nor\n```http\nGET /../../../../io/netty/example/stomp/websocket/StompWebSocketChatServer.class HTTP/1.1\nHost: 127.0.0.1:8080\n\n```\nWhen the application is run from a classpath directory, `Class.getResource` resolves the relative/root path and returns a `file:` URL, causing `RandomAccessFile` to open the file and return its binary content to the attacker.",
+    "snippet": "        String requestResource = request.uri().substring(1);\n        if (requestResource.isEmpty()) {\n            requestResource = \"index.html\";\n        }\n\n        URL resourceUrl = INSTANCE.getClass().getResource(requestResource);\n        if (resourceUrl == null) {\n            return false;\n        }\n\n        RandomAccessFile raf = null;\n        long fileLength = -1L;\n        try {\n            raf = new RandomAccessFile(resourceUrl.getFile(), \"r\");",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 81,
+    "end_line": 95
+  },
+  {
+    "finding_id": "adcccada-f071-5e41-b9b3-b035506dc2e1",
+    "session_id": "ChA3YWNkYzcwNzk2YTJlZjYzEAgaATAqBG1haW4",
+    "title": "Arbitrary File Read / Path Traversal via Unsanitized File Path in FileServerHandler",
+    "file_path": "/home/jfplante_google_com/repos/p23-netty_rep1/example/src/main/java/io/netty/example/file/FileServerHandler.java",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "**Source**: In `FileServerHandler.channelRead0(ChannelHandlerContext ctx, String msg)`, untrusted client-supplied input enters as `msg` (a string sent over a TCP socket delimited by a newline, decoded via `LineBasedFrameDecoder` and `StringDecoder`).\n\n**Sanitization/Validation**: There is no path sanitization, canonicalization check, or directory containment verification performed on `msg`.\n\n**Sink**: `msg` is passed directly to `new RandomAccessFile(msg, \"r\")` on line 40. The file contents are then written directly back to the client channel via `DefaultFileRegion` or `ChunkedFile`.\n\n**Conceptual Exploit Payload**:\nA client connects to the FileServer (e.g. on port 8023) and sends:\n```\n/etc/passwd\\n\n```\nor relative path traversal:\n```\n../../../../etc/shadow\\n\n```\nThe server instantiates `RandomAccessFile` for the target path and streams the file contents back to the remote client.",
+    "snippet": "            raf = new RandomAccessFile(msg, \"r\");",
+    "vuln_type": "CWE-22",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 40,
+    "end_line": 40
+  }
+]

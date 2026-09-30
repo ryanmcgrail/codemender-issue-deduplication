@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "adc556fa-f205-5684-bc6f-fbd01d204e4a",
+    "session_id": "ChBkMjIzN2E4OThjYWE1Y2VmEAgaATAqBG1haW4",
+    "title": "Path Traversal via Default WebMvc Static Resource Handling (CVE-2024-38816 / CVE-2024-38810)",
+    "file_path": "/home/jfplante_google_com/repos/p20-spring-boot_rep1/spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/web/servlet/WebMvcAutoConfiguration.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "### Vulnerability Analysis:\nA directory (path) traversal vulnerability exists in the default static resource serving configuration of Spring Boot. When an application is built on top of Spring Boot 3.3.0, it inherits a dependency on Spring Framework 6.1.8 (defined in `gradle.properties`). \n\nSpring Framework 6.1.8 is vulnerable to path traversal (CVE-2024-38816 and CVE-2024-38810) when serving static resources from the file system or classpath. By default, Spring Boot auto-configures WebMvc to serve static resources from classpath locations (such as `classpath:/static/` or `classpath:/public/`) mapping to the `/**` URL pattern.\n\n### Data Flow Path:\n- **Source**: Untrusted path sequences (containing encoded dots/slashes, e.g., `%2e%2e%2f` or nested relative paths) in the HTTP request URI.\n- **Sanitization/Validation**: The framework checks for path traversal using `StringUtils.cleanPath()` or similar, but the path resolution logic in the vulnerable Spring Framework version can be bypassed with specific URL structures or resource configurations.\n- **Sink**: The resolved path is then handled by `ResourceHttpRequestHandler`, which invokes `Resource.getInputStream()` or `Resource.getFile()` on the resolved resource to serve it, allowing files outside of the static folders to be leaked.\n\n### Conceptual Exploit Payload:\nTo bypass traversal filters and access `application.properties` or other files in the directory / classpath:\n```http\nGET /%252e%252e%252f%252e%252e%252fconfig/application.properties HTTP/1.1\nHost: localhost:8080\nConnection: close\n```\nOr when running on Windows, using backslash/slash combinations:\n```http\nGET /webjars/..%5c..%5c..%5cconfig/application.properties HTTP/1.1\nHost: localhost:8080\nConnection: close\n```",
+    "snippet": "\t\t@Override\n\t\tpublic void addResourceHandlers(ResourceHandlerRegistry registry) {\n\t\t\tif (!this.resourceProperties.isAddMappings()) {\n\t\t\t\tlogger.debug(\"Default resource handling disabled\");\n\t\t\t\treturn;\n\t\t\t}\n\t\t\taddResourceHandler(registry, this.mvcProperties.getWebjarsPathPattern(),\n\t\t\t\t\t\"classpath:/META-INF/resources/webjars/\");\n\t\t\taddResourceHandler(registry, this.mvcProperties.getStaticPathPattern(), (registration) -\u003e {\n\t\t\t\tregistration.addResourceLocations(this.resourceProperties.getStaticLocations());\n\t\t\t\tif (this.servletContext != null) {\n\t\t\t\t\tServletContextResource resource = new ServletContextResource(this.servletContext, SERVLET_LOCATION);\n\t\t\t\t\tregistration.addResourceLocations(resource);\n\t\t\t\t}\n\t\t\t});\n\t\t}",
+    "vuln_type": "CWE-22",
+    "vuln_id": "CVE-2024-38816",
+    "status": "OPEN",
+    "start_line": 323,
+    "end_line": 337
+  },
+  {
+    "finding_id": "b4845ade-3201-5aea-8182-e97adaa20c1c",
+    "session_id": "ChBkMjIzN2E4OThjYWE1Y2VmEAgaATAqBG1haW4",
+    "title": "Path Traversal via Default WebFlux Static Resource Handling (CVE-2024-38816 / CVE-2024-38810)",
+    "file_path": "/home/jfplante_google_com/repos/p20-spring-boot_rep1/spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/web/reactive/WebFluxAutoConfiguration.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "### Vulnerability Analysis:\nA directory (path) traversal vulnerability also exists in the default WebFlux static resource serving configuration of Spring Boot. When a reactive application is built on top of Spring Boot 3.3.0, it depends on Spring Framework 6.1.8 (defined in `gradle.properties`). \n\nSpring Framework 6.1.8 is vulnerable to path traversal (CVE-2024-38816 and CVE-2024-38810) when serving static resources under WebFlux. By default, Spring Boot auto-configures WebFlux to serve static resources from classpath locations (such as `classpath:/static/` or `classpath:/public/`) mapping to the `/**` URL pattern.\n\n### Data Flow Path:\n- **Source**: Untrusted path sequences (containing encoded dots/slashes, e.g., `%2e%2e%2f` or nested relative paths) in the HTTP request URI.\n- **Sanitization/Validation**: The framework checks for path traversal using `StringUtils.cleanPath()` or similar, but the path resolution logic in WebFlux's `ResourceWebHandler` can be bypassed with specific URL structures or resource configurations in the vulnerable version.\n- **Sink**: The resolved path is then handled by WebFlux's `ResourceWebHandler` which reads and serves the file content, allowing files outside of the static folders to be leaked.\n\n### Conceptual Exploit Payload:\nTo bypass traversal filters and access `application.properties` or other files in the classpath/directory:\n```http\nGET /%252e%252e%252f%252e%252e%252fconfig/application.properties HTTP/1.1\nHost: localhost:8080\nConnection: close\n```",
+    "snippet": "\t\t@Override\n\t\tpublic void addResourceHandlers(ResourceHandlerRegistry registry) {\n\t\t\tif (!this.resourceProperties.isAddMappings()) {\n\t\t\t\tlogger.debug(\"Default resource handling disabled\");\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tString webjarsPathPattern = this.webFluxProperties.getWebjarsPathPattern();\n\t\t\tif (!registry.hasMappingForPattern(webjarsPathPattern)) {\n\t\t\t\tResourceHandlerRegistration registration = registry.addResourceHandler(webjarsPathPattern)\n\t\t\t\t\t.addResourceLocations(\"classpath:/META-INF/resources/webjars/\");\n\t\t\t\tconfigureResourceCaching(registration);\n\t\t\t\tcustomizeResourceHandlerRegistration(registration);\n\t\t\t}\n\t\t\tString staticPathPattern = this.webFluxProperties.getStaticPathPattern();\n\t\t\tif (!registry.hasMappingForPattern(staticPathPattern)) {\n\t\t\t\tResourceHandlerRegistration registration = registry.addResourceHandler(staticPathPattern)\n\t\t\t\t\t.addResourceLocations(this.resourceProperties.getStaticLocations());\n\t\t\t\tconfigureResourceCaching(registration);\n\t\t\t\tcustomizeResourceHandlerRegistration(registration);\n\t\t\t}\n\t\t}",
+    "vuln_type": "CWE-22",
+    "vuln_id": "CVE-2024-38816",
+    "status": "OPEN",
+    "start_line": 208,
+    "end_line": 227
+  }
+]

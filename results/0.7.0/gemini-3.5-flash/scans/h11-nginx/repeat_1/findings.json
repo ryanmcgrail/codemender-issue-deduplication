@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "6dcad816-a00e-5656-a334-56b20aa1e1e3",
+    "session_id": "ChAyNWRmNjU5ZTliM2I5NGVlEAgaATAqBG1haW4",
+    "title": "Integer Underflow in ngx_http_mp4_module during STSC Atom Cropping",
+    "file_path": "/home/jfplante_google_com/repos/h11-nginx_rep1/src/http/modules/ngx_http_mp4_module.c",
+    "severity": "HIGH",
+    "confidence": 85,
+    "analysis": "In `ngx_http_mp4_crop_stsc_data`, when Nginx parses a crafted MP4 file with sample-to-chunk (`stsc`) atom entries where a later entry specifies a smaller chunk index than the preceding entry (`next_chunk \u003c chunk`), the calculation of the number of chunks `next_chunk - chunk` on line 3163 underflows. Since `next_chunk` and `chunk` are 32-bit unsigned integers, this underflow results in a very large unsigned value for `n`. Consequently, the check `start_sample \u003c n` evaluates to true, taking the `goto found;` branch immediately and prematurely. At `found:`, Nginx computes `target_chunk = chunk - 1;` and then updates `trak-\u003esample_to_chunk_entries` by subtracting `entries`, which can underflow and become extremely large, leading to denial of service, memory exhaustion, or incorrect file offset calculation during MP4 processing.\n\n### Conceptual Exploit Payload:\nTo trigger this vulnerability, an attacker can upload or request a crafted MP4 video file with a malformed `stsc` atom containing at least two sample-to-chunk entries:\n1. Entry 1: chunk = 10, samples = 1, id = 1\n2. Entry 2: chunk = 5, samples = 1, id = 1 (violating the monotonic increase expectation: next_chunk \u003c chunk)\n\nWhen Nginx processes this file to support MP4 streaming/start time seeking, it crops the `stsc` data. The subtraction `next_chunk - chunk` (5 - 10) underflows to `4294967291`, causing `n` to be extremely large. The parser prematurely stops, underflows `sample_to_chunk_entries`, and updates the MP4 file offsets with corrupted giant values.",
+    "snippet": "    while (entry \u003c end) {\n\n        next_chunk = ngx_mp4_get_32value(entry-\u003echunk);\n\n        ngx_log_debug5(NGX_LOG_DEBUG_HTTP, mp4-\u003efile.log, 0,\n                       \"sample:%uD, chunk:%uD, chunks:%uD, \"\n                       \"samples:%uD, id:%uD\",\n                       start_sample, chunk, next_chunk - chunk, samples, id);\n\n        n = (next_chunk - chunk) * samples;\n\n        if (start_sample \u003c n) {\n            goto found;\n        }\n\n        start_sample -= n;\n\n        prev_samples = samples;\n        chunk = next_chunk;\n        samples = ngx_mp4_get_32value(entry-\u003esamples);\n        id = ngx_mp4_get_32value(entry-\u003eid);\n        entries--;\n        entry++;\n    }",
+    "vuln_type": "Integer Underflow",
+    "vuln_id": "CWE-191",
+    "status": "OPEN",
+    "start_line": 3154,
+    "end_line": 3178
+  }
+]

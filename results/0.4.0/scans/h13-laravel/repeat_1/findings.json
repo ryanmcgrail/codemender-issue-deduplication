@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "1bada78e-f539-5067-982e-5d3767ef15dd",
+    "SessionID": "ChA5YWJkMGUzZTRlZTY3NDdiEAgaATAqBG1haW4",
+    "Title": "Route Signature Reassembly Parsing Discrepancies",
+    "FilePath": "/home/jfplante_google_com/repos/h13-laravel_rep1/src/Illuminate/Routing/UrlGenerator.php",
+    "Severity": "MEDIUM",
+    "Confidence": 85,
+    "Analysis": "In `src/Illuminate/Routing/UrlGenerator.php`, the `hasCorrectSignature` method evaluates if the incoming signature query parameter validates the constructed payload `$original` URL. \n\n### Source\nThe validation logic reads the raw, URL-encoded query string directly from the web server using `$request-\u003eserver-\u003eget('QUERY_STRING')` and attempts to manually parse and split query parameters by `\u0026`, extracting keys via `Str::before($parameter, '=')` to filter out any ignored parameters (such as `signature` or user-defined ignored tracking parameters like `utm_source`).\n\n### Sanitization/Validation\nThe reconstructed string `$queryString` is then used to compute the valid HMAC signature. However, there are parsing discrepancies between PHP/Symfony's native query string parser (which decodes URL-encoded parameters, handles multi-key/duplicate parameters by overriding previous keys, and converts spaces/dots in parameter names to underscores) versus the raw `QUERY_STRING` string-manipulation and split-and-filter logic used by `UrlGenerator::hasCorrectSignature`. \n\n### Sink\nSince the application's routing and request input binding retrieve parsed parameters from `$request-\u003equery()`, an attacker can leverage this parsing discrepancy. For example:\n- A parameter named `utm_source=foo=bar` is split by `hasCorrectSignature` to identify the key as `utm_source`. Since `utm_source` is typically ignored, the parameter is removed from the signature generation payload. However, PHP/Symfony decodes and parses this as `utm_source` with value `foo=bar`.\n- Conversely, characters like dots and spaces are converted to underscores by PHP/Symfony (`utm.source` -\u003e `utm_source`). However, `hasCorrectSignature` manually checks the raw `QUERY_STRING` key (`utm.source`) against `$ignoreQuery` (`['signature', 'utm_source']`), which fails to match because it does not translate dot/space characters to underscores. This causes the parameter to be treated as non-ignored, leading to signature verification failures when standard tracking parameters are altered.\n\n### Conceptual Payload\nAn attacker can submit requests containing specific query parameters designed to abuse these differences (e.g., duplicate query keys, arrays, or character mutations) where PHP/Symfony processes a different input argument value or parameter structure compared to what is authenticated under the signature's HMAC `$original` reconstructed representation.",
+    "Snippet": "        $queryString = collect(explode('\u0026', (string) $request-\u003eserver-\u003eget('QUERY_STRING')))\n            -\u003ereject(fn ($parameter) =\u003e in_array(Str::before($parameter, '='), $ignoreQuery))\n            -\u003ejoin('\u0026');",
+    "VulnType": "Improper Verification of Cryptographic Signature",
+    "VulnID": "CWE-347",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 450,
+    "EndLine": 476,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

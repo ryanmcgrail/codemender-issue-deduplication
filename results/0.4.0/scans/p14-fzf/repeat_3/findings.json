@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "0d6ecaae-d6fd-5910-a4f3-b76de2ce6ba2",
+    "SessionID": "ChAyZTkwMzY4MjRjZmE3OTUxEAgaATAqBG1haW4",
+    "Title": "Remote Code Execution via Cross-Site Request Forgery (CSRF) on HTTP Listener",
+    "FilePath": "src/server.go",
+    "Severity": "CRITICAL",
+    "Confidence": 100,
+    "Analysis": "### Description\nWhen `fzf` is run with `--listen [addr:port]`, a custom HTTP server is started to accept actions via HTTP POST requests. By default, when listening on a local interface (`localhost` or `127.0.0.1`), fzf does not require setting an `FZF_API_KEY`. \n\nFurthermore, the custom HTTP server implementation in `src/server.go` fails to validate the `Origin` or `Host` headers of incoming HTTP requests. Because standard web browsers allow cross-origin `POST` requests (using content types like `text/plain` or `application/x-www-form-urlencoded` that do not trigger CORS pre-flight checks), any malicious website visited by a user can send a cross-origin HTTP POST request to the local fzf server (e.g. at `http://127.0.0.1:port/`).\n\nSince local connections are fully trusted (see `src/terminal.go` line 3627) and fzf allows execute-style actions (e.g., `execute`, `reload`, etc.), this allows any cross-origin client to execute arbitrary shell commands on the user's host machine, resulting in Remote Code Execution (RCE).\n\n### Conceptual Exploit Payload\nA malicious website can perform a local port scan using JavaScript to discover the active `fzf` port. Once discovered, it can send a POST request using the `fetch` API:\n\n```javascript\nfetch('http://127.0.0.1:5000/', {\n  method: 'POST',\n  mode: 'no-cors',\n  headers: {\n    'Content-Type': 'text/plain'\n  },\n  body: 'execute:bash -c \"touch /tmp/rce_exploit_success\"'\n});\n```\n\nBecause fzf parses the entire body as an action list via `parseSingleActionList` and executes it, the shell command `bash -c \"touch /tmp/rce_exploit_success\"` will be immediately executed.",
+    "Snippet": "\tif len(server.apiKey) != 0 \u0026\u0026 subtle.ConstantTimeCompare([]byte(apiKey), server.apiKey) != 1 {\n\t\treturn unauthorized(\"invalid api key\")\n\t}",
+    "VulnType": "CWE-352",
+    "VulnID": "CWE-352",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 205,
+    "EndLine": 212,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

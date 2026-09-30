@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "a317c924-c63a-531e-932a-31c027d6dff2",
+    "session_id": "ChAwMmIyZDA4NmUwY2YzNjk2EAgaATAqBG1haW4",
+    "title": "Use of Cryptographically Weak Hashing Algorithm (SHA-1) for Session Cookie Signing",
+    "file_path": "/home/jfplante_google_com/repos/p01-flask_rep1/src/flask/sessions.py",
+    "severity": "MEDIUM",
+    "confidence": 85,
+    "analysis": "The Flask framework defaults to using the cryptographically weak SHA-1 hashing algorithm (via HMAC-SHA1) for signing session cookies in its default session interface (`SecureCookieSessionInterface`). \n\n### Source\nThe session cookie is received from untrusted clients via the `Cookie` HTTP header.\n\n### Sanitization/Validation\nAlthough session cookies are signed using `itsdangerous` to prevent tampering, the signature scheme by default uses SHA-1 (`hashlib.sha1`). SHA-1 is a cryptographically weak algorithm that has known collision attacks, making it a weaker choice for session signing than modern alternatives like SHA-256.\n\n### Sink\nThe signature digest is computed using `hashlib.sha1` inside `_lazy_sha1` in `src/flask/sessions.py`.\n\n### Conceptual Exploit Payload\nBy default, the session signature is computed as:\n```python\ndigest_method = hashlib.sha1\n```\nAn attacker who is able to exploit cryptographic weaknesses or collisions in SHA-1 could potentially craft or manipulate signed sessions, bypassing authentication or session integrity checks. Flask should default to a stronger hashing algorithm like SHA-256 for session cookie signatures.",
+    "snippet": "def _lazy_sha1(string: bytes = b\"\") -\u003e t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)",
+    "vuln_type": "CWE-327",
+    "vuln_id": "CWE-327",
+    "status": "OPEN",
+    "start_line": 280,
+    "end_line": 285
+  }
+]

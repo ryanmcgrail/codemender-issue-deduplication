@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "e970b744",
+    "severity": "HIGH",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "file_path": "packages/ra-ui-materialui/src/field/UrlField.tsx",
+    "title": "Cross-Site Scripting (XSS) via javascript: URI in UrlField",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Cross-Site Scripting (XSS) via javascript: URI in UrlField",
+    "snippet": ""
+  },
+  {
+    "finding_id": "38c4dc73",
+    "severity": "HIGH",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "file_path": "packages/ra-ui-materialui/src/field/FileField.tsx",
+    "title": "Cross-Site Scripting (XSS) via javascript: URI in FileField",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Cross-Site Scripting (XSS) via javascript: URI in FileField",
+    "snippet": ""
+  }
+]

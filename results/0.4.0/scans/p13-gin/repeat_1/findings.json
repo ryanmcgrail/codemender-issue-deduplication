@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "a346b129-ab7c-54f7-a26a-f133e766ab3f",
+    "SessionID": "ChA0MDRmYThlYmU2OTYyNzUwEAgaATAqBG1haW4",
+    "Title": "Open Redirect vulnerability via X-Forwarded-Prefix header in redirectTrailingSlash",
+    "FilePath": "/home/jfplante_google_com/repos/p13-gin_rep1/gin.go",
+    "Severity": "MEDIUM",
+    "Confidence": 90,
+    "Analysis": "In `gin.go`, the `redirectTrailingSlash` function handles HTTP requests that mismatch on trailing slashes (e.g., matching a route with or without a trailing slash). In doing so, it attempts to prepend the value of the `X-Forwarded-Prefix` header to the redirect URL path.\n\nAlthough it uses `path.Clean` on the prefix, `path.Clean` only resolves relative path segments (like `..`) but does not prevent absolute URIs or scheme relative URIs (e.g. `//attacker.com`). Furthermore, the regex replacement logic on line 696 (`prefix = regSafePrefix.ReplaceAllString(prefix, \"\")` where `regSafePrefix = regexp.MustCompile(\"[^a-zA-Z0-9/-]+\")`) removes characters such as `:` and `.`, but does NOT prevent multiple leading slashes (such as `//` or `///`), which are common techniques to trigger open redirects in many browsers (scheme-relative URLs).\n\nFor example:\nIf an attacker sends a request:\n```http\nGET /path/ HTTP/1.1\nHost: vulnerable.com\nX-Forwarded-Prefix: /api/../..//attacker.com\n```\nIn `redirectTrailingSlash`:\n1. `c.Request.Header.Get(\"X-Forwarded-Prefix\")` is `/api/../..//attacker.com`\n2. `path.Clean` resolves this to `/../attacker.com`\n3. `regSafePrefix` replaces any unsafe characters (none in this case, except maybe `.`, which becomes `/../attackercom`)\n4. The path `p` becomes `/../attackercom` + `/` + `path`\n5. Since `req.URL.Path = p + \"/\"`, and then standard redirection logic is performed on the updated URL via `http.Redirect(c.Writer, req, rURL, code)`. This will result in an Open Redirect vulnerability if the prefix can be crafted to influence the domain portion.\n\nIn `routes_test.go`, we can see:\n`PerformRequest(router, http.MethodGet, \"/path/\", header{Key: \"X-Forwarded-Prefix\", Value: \"api/../../\"})` redirects to `//path`. Multiple slashes like `//` are treated by some HTTP clients and browsers as a protocol-relative URL, redirecting the user to `//path` (which can be a different host). If the attacker passes `//attacker.com`, it can lead to an arbitrary external redirection.\n\nThis vulnerability corresponds to CWE-601: URL Redirection to Untrusted Site ('Open Redirect').",
+    "Snippet": "func redirectTrailingSlash(c *Context) {\n\treq := c.Request\n\tp := req.URL.Path\n\tif prefix := path.Clean(c.Request.Header.Get(\"X-Forwarded-Prefix\")); prefix != \".\" {\n\t\tprefix = regSafePrefix.ReplaceAllString(prefix, \"\")\n\t\tprefix = regRemoveRepeatedChar.ReplaceAllString(prefix, \"/\")\n\n\t\tp = prefix + \"/\" + req.URL.Path\n\t}\n\treq.URL.Path = p + \"/\"\n\tif length := len(p); length \u003e 1 \u0026\u0026 p[length-1] == '/' {\n\t\treq.URL.Path = p[:length-1]\n\t}\n\tredirectRequest(c)\n}",
+    "VulnType": "CWE-601",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 692,
+    "EndLine": 706,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

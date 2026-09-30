@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "e5402112",
+    "severity": "HIGH",
+    "vuln_type": "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+    "file_path": "packages/shared/src/escapeHtml.ts",
+    "title": "HTML Comment Escaping Bypass Leading to SSR XSS in escapeHtmlComment",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "HTML Comment Escaping Bypass Leading to SSR XSS in escapeHtmlComment",
+    "snippet": ""
+  }
+]

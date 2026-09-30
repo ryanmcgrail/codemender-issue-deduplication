@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "254df9e1-e9ca-5bc4-9306-3191a7a21a96",
+    "session_id": "ChBiZDhhNTBmNjI0YzJkY2RkEAgaATAqBG1haW4",
+    "title": "Path Traversal in Remote Module Subdirectory Resolution",
+    "file_path": "/home/jfplante_google_com/repos/p17-opentofu_rep1/internal/addrs/module_source.go",
+    "severity": "HIGH",
+    "confidence": 90,
+    "analysis": "### Data Flow Analysis\n- **Source**: Untrusted module source string specified in configuration (e.g. in PRs evaluated by automation systems such as Atlantis, Terraform Cloud, Spacelift) or returned dynamically by an external module registry via `X-Terraform-Get` or the JSON response body (`ModuleLocation`).\n- **Sanitization/Validation**: In `internal/addrs/module_source.go`, `parseModuleSourceRemote` validates the subdirectory component using `strings.HasPrefix(subDir, \"../\")`. This check is flawed in two ways:\n  1. If `subDir` is exactly `\"..\"`, `strings.HasPrefix(\"..\", \"../\")` returns `false`, so `\"..\\..\"` or `\"..\"` is not caught.\n  2. The input is cleaned using Go's `path.Clean`, which only processes forward slashes (`/`). Unlike `parseModuleSourceLocal` (which explicitly converts backslashes via `strings.ReplaceAll(raw, \"\\\\\", \"/\")`), `parseModuleSourceRemote` leaves backslashes intact. Consequently, on Windows systems, directory traversal sequences utilizing backslashes (such as `..\\..\\`) completely bypass `strings.HasPrefix(subDir, \"../\")`.\n- **Sink**: In `internal/initwd/module_install.go` (lines 660-666), the unchecked `finalAddr.Subdir` is joined to the installation directory:\n  ```go\n  subDir := filepath.FromSlash(finalAddr.Subdir)\n  modDir := filepath.Join(instPath, subDir)\n  mod, mDiags := i.loader.Parser().LoadConfigDir(modDir)\n  ```\n  `filepath.Join` resolves the `..` or `..\\` traversal sequences relative to `instPath`, escaping the sandbox and pointing `modDir` to an arbitrary directory on the system, which is then parsed and loaded as configuration via `LoadConfigDir(modDir)`.\n\n### Conceptual Exploit Payload\nOn Windows, a module block with:\n```hcl\nmodule \"exploit\" {\n  source = \"git::https://example.com/repo.git//..\\\\..\\\\..\\\\malicious_config\"\n}\n```\nOr on Unix:\n```hcl\nmodule \"exploit\" {\n  source = \"git::https://example.com/repo.git//..\"\n}\n```\nDuring `tofu init`, `getmodules.SplitPackageSubdir` splits the source at `//` into `subDir = \"..\\\\..\\\\..\\\\malicious_config\"`. Because `strings.HasPrefix(\"..\\\\..\\\\..\\\\malicious_config\", \"../\")` is false, validation is bypassed and `filepath.Join(instPath, subDir)` escapes the module install directory.",
+    "snippet": "func parseModuleSourceRemote(raw string) (ModuleSourceRemote, error) {\n\tvar subDir string\n\traw, subDir = getmodules.SplitPackageSubdir(raw)\n\tif strings.HasPrefix(subDir, \"../\") {\n\t\treturn ModuleSourceRemote{}, fmt.Errorf(\"subdirectory path %q leads outside of the module package\", subDir)\n\t}",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 271,
+    "end_line": 276
+  }
+]

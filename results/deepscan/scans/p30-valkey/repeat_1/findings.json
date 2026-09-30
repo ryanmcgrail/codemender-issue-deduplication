@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "58796248-e0f3-5bc0-abfc-4378832b3ed3",
+    "session_id": "ChA1YWM1ZmUzYzk5NzY4ZWJkEAgaATAqBG1haW4",
+    "title": "Stack-based Buffer Overflow in redis_check_aof_main via Unbounded memcpy",
+    "file_path": "/home/jfplante_google_com/repos/p30-valkey_rep1/src/valkey-check-aof.c",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `redis_check_aof_main` in `src/valkey-check-aof.c`, the utility accepts a file path from command-line arguments `argv[1]`, `argv[2]`, or `argv[3]`.\n\n### Data Flow Analysis:\n- **Source**: CLI argument `argv[1]`, `argv[2]`, or `argv[3]` assigned to `filepath` (lines 517, 520, 534).\n- **Sanitization/Validation**: None. The code checks the number of arguments and timestamp formatting if applicable, but does not check the length of `filepath` against `PATH_MAX`.\n- **Sink**: `memcpy(temp_filepath, filepath, strlen(filepath) + 1);` at line 543, where `temp_filepath` is a fixed-size stack buffer of `PATH_MAX + 1` bytes (line 510).\n\nBecause `strlen(filepath) + 1` can be arbitrary in size, supplying a file path argument longer than `PATH_MAX` (typically 4096 bytes) causes `memcpy` to write past the bounds of `temp_filepath` on the stack, leading to a stack-based buffer overflow (memory corruption).\n\n### Conceptual Exploit Payload:\nExecute the binary with an oversized path argument:\n```bash\nvalkey-check-aof $(python3 -c \"print('A' * 5000)\")\n```\nThis triggers an unbounded copy of 5001 bytes into the 4097-byte buffer `temp_filepath` on the stack, corrupting stack memory.",
+    "snippet": "    /* In the glibc implementation dirname may modify their argument. */\n    memcpy(temp_filepath, filepath, strlen(filepath) + 1);\n    dirpath = dirname(temp_filepath);",
+    "vuln_type": "Buffer Overflow",
+    "vuln_id": "CWE-120",
+    "status": "OPEN",
+    "start_line": 542,
+    "end_line": 544
+  }
+]

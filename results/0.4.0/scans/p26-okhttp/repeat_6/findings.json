@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "acf9ba9a-31f4-570f-815d-c57532e87d8b",
+    "SessionID": "ChAzNzRjZGMzYTBiZDUwMmQ2EAgaATAqBG1haW4",
+    "Title": "Resource Exhaustion / CPU Starvation in MultipartReader when skipping parts",
+    "FilePath": "okhttp/src/main/kotlin/okhttp3/MultipartReader.kt",
+    "Severity": "MEDIUM",
+    "Confidence": 85,
+    "Analysis": "Under certain conditions, OkHttp's `MultipartReader` can exhibit extremely slow behavior or infinite loops/high CPU utilization when skipping unrecognized/unprocessed parts due to the interaction of `currentPartBytesRemaining` and `source.skip`. Specifically, `currentPartBytesRemaining` checks the buffer for the `crlfDashDashBoundary` delimiter using `source.buffer.indexOf()`. However, `indexOf` only looks at what is currently buffered in `source.buffer`. If the delimiter is not found in the buffer, it returns `-1L` and estimates the bytes remaining via `minOf(maxResult, source.buffer.size - crlfDashDashBoundary.size + 1)`. If `source.buffer.size` is less than `crlfDashDashBoundary.size - 1`, this subtraction can underflow or result in a small/zero/negative value (or small progress), causing the `nextPart` loop (which calls `source.skip(toSkip)`) to spin, consuming high CPU. \n\nA conceptual payload would involve sending a multipart request where a part has a payload that is extremely large or chunked slowly, and is structured such that `currentPartBytesRemaining` returns low numbers (or `0L`) repeatedly without consuming the boundary, leading to excessive looping or denial of service due to CPU exhaustion during `skip()` operations in `nextPart()`.\n",
+    "Snippet": "  private fun currentPartBytesRemaining(maxResult: Long): Long {\n    source.require(crlfDashDashBoundary.size.toLong())\n\n    return when (val delimiterIndex = source.buffer.indexOf(crlfDashDashBoundary)) {\n      -1L -\u003e minOf(maxResult, source.buffer.size - crlfDashDashBoundary.size + 1)\n      else -\u003e minOf(maxResult, delimiterIndex)\n    }\n  }",
+    "VulnType": "Resource Exhaustion",
+    "VulnID": "CWE-400",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 177,
+    "EndLine": 184,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

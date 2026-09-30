@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "aa4decab-4ec6-534b-ba34-c1077d6d20dd",
+    "SessionID": "ChA0OTc5MDYwN2VhOWJmZmJlEAgaATAqBG1haW4",
+    "Title": "Open Redirect Bypass via Backslash Character Parser Mismatch (CVE-2024-43799)",
+    "FilePath": "/home/jfplante_google_com/repos/p07-express_rep1/lib/response.js",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Taint-Flow Analysis\n\n- **Source**: Untrusted user input enters the application via a request parameter (e.g., `req.query.target`).\n- **Sanitization / Validation**: The application attempts to validate the input URL using legacy `url.parse(input).host` (or similar checks) to verify that the target host belongs to an allow-list (e.g., `google.com`). However, legacy `url.parse()` treats the backslash character `\\` as a path separator, leading it to parse the host of `http://google.com\\\\@attacker.com` as `'google.com'`.\n- **Sink**: The verified string is then passed to `res.redirect(target)` (which calls `res.location(target)`), setting the `Location` header in the response.\n\n### Vulnerability Mechanism\n\nIn `lib/response.js`, `res.location` parses and slices the URL before encoding the path:\n```javascript\nvar m = schemaAndHostRegExp.exec(loc);\nvar pos = m ? m[0].length + 1 : 0;\nloc = loc.slice(0, pos) + encodeUrl(loc.slice(pos));\n```\nWhere `schemaAndHostRegExp` is defined as:\n```javascript\nvar schemaAndHostRegExp = /^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\\/\\/[^\\\\\\\\\\/\\\\?]+/ ;\n```\nWhen `loc` is `http://google.com\\\\\\\\@attacker.com`:\n1. The regular expression match stops at the first backslash `\\` because `\\` is excluded in `[^\\\\\\\\\\/\\\\?]+`.\n2. The match `m[0]` is `'http://google.com'`. Its length is 17.\n3. `pos` is calculated as `m[0].length + 1` which is `18`.\n4. `loc.slice(0, 18)` is `'http://google.com\\'`. This slice containing a raw backslash `\\` is NOT encoded and is copied directly to the final `Location` header.\n5. In a modern browser (such as Chrome or Firefox), URL parsing complies with the WHATWG standard. A browser normalizes the backslashes or processes authority such that `@attacker.com` is interpreted as the destination host, while `google.com` is treated as user info. \n\nAs a result, the browser redirects the user to `attacker.com` instead of the allowed `google.com`, completely bypassing the server-side validation.\n\n### Conceptual Exploit Payload\n\nAn attacker sends a request to the vulnerable endpoint with a payload:\n```http\nGET /redirect?url=http://google.com\\\\\\\\@attacker.com HTTP/1.1\nHost: vulnerable-app.com\n```\n\n**Server Validation Behavior:**\n```javascript\nconst target = req.query.url; // \"http://google.com\\\\\\\\@attacker.com\"\nconst parsed = require('url').parse(target, false, true);\nif (parsed.host === \"google.com\") {\n  res.redirect(target); // ALLOWED\n}\n```\n\n**Response Sent to Client:**\n```http\nHTTP/1.1 302 Found\nLocation: http://google.com\\\\\\\\@attacker.com\n```\n\n**Browser Redirection Behavior:**\nThe browser receives the raw backslash, normalizes it, and redirects the user to `http://attacker.com`.",
+    "Snippet": "  var m = schemaAndHostRegExp.exec(loc);\n  var pos = m ? m[0].length + 1 : 0;\n\n  // Only encode after host to avoid invalid encoding which can introduce\n  // vulnerabilities (e.g. `\\\\` to `%5C`).\n  loc = loc.slice(0, pos) + encodeUrl(loc.slice(pos));",
+    "VulnType": "Open Redirect",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 917,
+    "EndLine": 924,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

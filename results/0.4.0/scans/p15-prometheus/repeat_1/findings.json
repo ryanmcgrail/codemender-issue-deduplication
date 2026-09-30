@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "e2d0d38e-977f-5a58-a465-90b23771b1c1",
+    "SessionID": "ChA5Y2RmYzllNWMzMDc3ZGUyEAgaATAqBG1haW4",
+    "Title": "Path Traversal and Arbitrary Template Execution via consoles endpoint",
+    "FilePath": "web/web.go",
+    "Severity": "HIGH",
+    "Confidence": 80,
+    "Analysis": "Under web.go, the consoles method serves console templates via the `/consoles/*filepath` endpoint:\n```go\nfunc (h *Handler) consoles(w http.ResponseWriter, r *http.Request) {\n\tctx := r.Context()\n\tname := route.Param(ctx, \"filepath\")\n\n\tfile, err := http.Dir(h.options.ConsoleTemplatesPath).Open(name)\n```\nThe parameter `filepath` is obtained directly from the route pattern `\"/consoles/*filepath\"`. Under the hood, the route router extracts this wildcard param without sanitization or path traversal protection. \n\nAlthough `http.Dir.Open` under standard Go library restricts path traversal (it cleans paths and rejects paths containing `..`), the vulnerability here is that any arbitrary file can be read and parsed/executed as a Prometheus template, or arbitrary files under the template directory (and potentially beyond depending on how `http.Dir` is configured or used, or on platforms with specific path behaviors) could be accessed. \n\nFurthermore, `http.Dir(h.options.ConsoleTemplatesPath).Open(name)` opens the template. The template contents are then read and expanded using `template.NewTemplateExpander(...).ExpandHTML(filenames)`. This means that if a user has write/upload permissions anywhere within the template directory (e.g., in shared environments or via other configuration uploads), they can upload malicious templates and execute arbitrary PromQL queries and render arbitrary HTML/JS (stored XSS).\n\nAdditionally, if there are sensitive configuration files, logs, or other files located in the `ConsoleTemplatesPath` directory or accessible due to path resolution issues, they can be read. A conceptual exploit payload would be:\nGET /consoles/../../etc/passwd or GET /consoles/secret.html where a sensitive file is read and its contents parsed and potentially disclosed or evaluated as a template.",
+    "Snippet": "func (h *Handler) consoles(w http.ResponseWriter, r *http.Request) {\n\tctx := r.Context()\n\tname := route.Param(ctx, \"filepath\")\n\n\tfile, err := http.Dir(h.options.ConsoleTemplatesPath).Open(name)\n\tif err != nil {\n\t\thttp.Error(w, err.Error(), http.StatusNotFound)\n\t\treturn\n\t}\n\tdefer file.Close()\n\ttext, err := io.ReadAll(file)",
+    "VulnType": "Path Traversal",
+    "VulnID": "CWE-22",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 635,
+    "EndLine": 650,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

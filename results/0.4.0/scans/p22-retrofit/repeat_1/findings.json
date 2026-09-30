@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "9f4aaa58-bc31-5c47-a2b9-dc101247958d",
+    "SessionID": "ChA0NTY3N2E1OTFjYmE4Nzk0EAgaATAqBG1haW4",
+    "Title": "XML External Entity (XXE) Injection in SimpleXML Converter",
+    "FilePath": "/home/jfplante_google_com/repos/p22-retrofit_rep1/retrofit-converters/simplexml/src/main/java/retrofit2/converter/simplexml/SimpleXmlResponseBodyConverter.java",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `SimpleXmlResponseBodyConverter` class in the SimpleXML converter module is vulnerable to XML External Entity (XXE) injection. By default, `org.simpleframework.xml.Serializer` (usually implemented by `Persister`) does not disable external DTDs or external entity loading. This allows a remote attacker to supply a malicious XML response body containing an external entity (e.g., pointing to sensitive local files like `/etc/passwd` or using `http://` schemas to trigger Server-Side Request Forgery/SSRF) when Retrofit processes the API response.\n\nBecause this converter relies entirely on the default behavior of the `Serializer` passed to it (or constructed by default in `SimpleXmlConverterFactory.create()`), and because there is no sanitization or secure parser configuration in `SimpleXmlResponseBodyConverter.convert()`, an attacker-controlled HTTP response will parse and resolve external entities upon deserialization.\n\n**Conceptual Exploit Payload:**\nAn attacker-controlled HTTP server returns the following XML response to a Retrofit client configured with `SimpleXmlConverterFactory`:\n\n```xml\n\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE root [\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e\n]\u003e\n\u003cuser\u003e\n  \u003cusername\u003e\u0026xxe;\u003c/username\u003e\n  \u003cemail\u003eattacker@example.com\u003c/email\u003e\n\u003c/user\u003e\n```\n\nWhen `serializer.read()` executes in `SimpleXmlResponseBodyConverter.convert()`, the underlying XML parser resolves the `\u0026xxe;` entity, reading the contents of `/etc/passwd` and populating the parsed object with it, leading to sensitive data exposure or SSRF.",
+    "Snippet": "final class SimpleXmlResponseBodyConverter\u003cT\u003e implements Converter\u003cResponseBody, T\u003e {\n  private final Class\u003cT\u003e cls;\n  private final Serializer serializer;\n  private final boolean strict;\n\n  SimpleXmlResponseBodyConverter(Class\u003cT\u003e cls, Serializer serializer, boolean strict) {\n    this.cls = cls;\n    this.serializer = serializer;\n    this.strict = strict;\n  }\n\n  @Override\n  public T convert(ResponseBody value) throws IOException {\n    try {\n      T read = serializer.read(cls, value.charStream(), strict);",
+    "VulnType": "Injection",
+    "VulnID": "CWE-611",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 23,
+    "EndLine": 50,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

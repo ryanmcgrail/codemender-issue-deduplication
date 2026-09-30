@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "de9459cb",
+    "severity": "HIGH",
+    "vuln_type": "Missing Authentication for Critical Function",
+    "file_path": "src/server.go",
+    "title": "Missing Authentication Check for GET Requests in HTTP Server",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Missing Authentication Check for GET Requests in HTTP Server",
+    "snippet": ""
+  },
+  {
+    "finding_id": "03072c20",
+    "severity": "CRITICAL",
+    "vuln_type": "Cross-Site Request Forgery (CSRF)",
+    "file_path": "src/server.go",
+    "title": "Cross-Site Request Forgery (CSRF) Leading to Arbitrary Command Execution via Embedded HTTP Server",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Cross-Site Request Forgery (CSRF) Leading to Arbitrary Command Execution via Embedded HTTP Server",
+    "snippet": ""
+  }
+]

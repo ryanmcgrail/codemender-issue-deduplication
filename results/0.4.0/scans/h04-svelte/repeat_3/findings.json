@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "ec2ac07a-9dea-539a-97f8-f681c3e87a3e",
+    "SessionID": "ChA5NGU3MDgyMjU4ODQ4NDEwEAgaATAqBG1haW4",
+    "Title": "Cross-Site Scripting (XSS) via HTML Comment Escape in Error Boundary SSR Serialization",
+    "FilePath": "packages/svelte/src/internal/server/renderer.js",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "When rendering server-side, Svelte serializes errors thrown inside an error boundary (`\u003csvelte:boundary\u003e`) into HTML comments via the private static method `#serialize_failed_boundary(error)`. In Svelte 5, the serialization format parses the caught error through Svelte's global `transformError` function. However, the serialized output of `transformError` is injected directly into an HTML comment as:\n`\u003c!--[HYDRATION_START_FAILED][JSON]--\u003e`\nIn `packages/svelte/src/internal/server/renderer.js`'s `#serialize_failed_boundary` method:\n```javascript\nstatic #serialize_failed_boundary(error) {\n    var json = JSON.stringify(error);\n    var escaped = json.replace(/\u003e/g, '\\\\\\\\u003e').replace(/\u003c/g, '\\\\\\\\u003c');\n    return `\u003c!--\\${HYDRATION_START_FAILED}\\${escaped}--\u003e`;\n}\n```\nThis sanitization strategy is insufficient. Under HTML comment parsing rules, a sequence like `--!\u003e` will terminate the HTML comment prematurely. An attacker capable of triggering an error with a custom message/object containing `--!\u003e` (which is passed down to `transformError` and then serialized) can escape the HTML comment context. Following the comment escape, they can inject arbitrary HTML tags such as `\u003cimg src=x onerror=alert(1)\u003e`, leading to a Cross-Site Scripting (XSS) vulnerability.\n\n**Conceptual Exploit Payload**:\nIf a user-supplied input is reflected in an error message (for example, throwing a validation error on input: `--!\u003e\u003cimg src=x onerror=alert(1)\u003e\u003c!--`), Svelte's SSR will serialize this error inside an HTML comment:\n`\u003c!--${HYDRATION_START_FAILED}{\"message\":\"--!\u003e\u003cimg src=x onerror=alert(1)\u003e\u003c!--\"}--\u003e`\nSince the browser parses the `--!\u003e` as the end of the comment in HTML5 parsing mode, the parser breaks out of the comment and interprets `\u003cimg src=x onerror=alert(1)\u003e` as a normal HTML tag, executing the malicious payload.",
+    "Snippet": "\\tstatic #serialize_failed_boundary(error) {\\n\\t\\tvar json = JSON.stringify(error);\\n\\t\\tvar escaped = json.replace(/\u003e/g, '\\\\\\\\u003e').replace(/\u003c/g, '\\\\\\\\u003c');\\n\\t\\treturn `\u003c!--\\${HYDRATION_START_FAILED}\\${escaped}--\u003e`;\\n\\t}",
+    "VulnType": "XSS",
+    "VulnID": "CWE-79",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 505,
+    "EndLine": 509,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

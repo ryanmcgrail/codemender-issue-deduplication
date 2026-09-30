@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "3194d26f-4c27-5841-83ee-bad859f07dde",
+    "session_id": "ChBmZTk0NTU4ZWU1ZTM0NTJlEAgaATAqBG1haW4",
+    "title": "Open Redirect in OAuth2 Filter via Unvalidated 'state' Parameter",
+    "file_path": "/home/jfplante_google_com/repos/p36-envoy_rep1/source/extensions/filters/http/oauth2/filter.cc",
+    "severity": "MEDIUM",
+    "confidence": 95,
+    "analysis": "### Source\nUntrusted input enters through the `state` query parameter in an HTTP request directed at the OAuth callback endpoint (e.g., `/_oauth`), parsed via `Http::Utility::QueryParamsMulti::parseQueryString(path_str)` in `OAuth2Filter::decodeHeaders`.\n\n### Sanitization / Validation\nThe filter performs minimal parsing on `state` via `state_url.initialize(state, false)` and verifies `!config_-\u003eredirectPathMatcher().match(state_url.pathAndQueryParams())` to prevent infinite redirect loops back to the callback path itself. However, the filter fails to perform any validation on the destination authority/host: `state_url.hostAndPort()` is never compared against `host_` or validated against an allowed domains list, allowing arbitrary external domains.\n\n### Sink\nIn `OAuth2Filter::decodeHeaders` (lines 349-353), the filter constructs a `302 Found` HTTP response setting the `Location` header directly to the unvalidated `state` value (`{Http::Headers::get().Location, state}`) and calls `decoder_callbacks_-\u003eencodeHeaders(...)`. (A similar flow exists in `finishGetAccessTokenFlow` at line 619).\n\n### Conceptual Exploit Payload\nAn attacker lures an authenticated victim (or a victim in the process of authenticating) to access:\n```http\nGET /_oauth?state=https%3A%2F%2Fevil.example.com%2Fphishing HTTP/1.1\nHost: secure-app.example.com\nCookie: OauthHMAC=\u003cvalid_session_hmac\u003e\n```\nBecause the victim has an active session, `canSkipOAuth(headers)` returns `true`, and the path matches `redirectPathMatcher()`. Envoy decodes `state` to `https://evil.example.com/phishing`, confirms it is a parseable URL whose path (`/phishing`) does not match `/_oauth`, and immediately responds with:\n```http\nHTTP/1.1 302 Found\nLocation: https://evil.example.com/phishing\n```\nThis forces the victim's browser to navigate to the attacker's site.",
+    "snippet": "      Http::ResponseHeaderMapPtr response_headers{\n          Http::createHeaderMap\u003cHttp::ResponseHeaderMapImpl\u003e(\n              {{Http::Headers::get().Status, std::to_string(enumToInt(Http::Code::Found))},\n               {Http::Headers::get().Location, state}})};\n      decoder_callbacks_-\u003eencodeHeaders(std::move(response_headers), true, REDIRECT_RACE);",
+    "vuln_type": "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')",
+    "vuln_id": "CWE-601",
+    "status": "OPEN",
+    "start_line": 349,
+    "end_line": 353
+  }
+]

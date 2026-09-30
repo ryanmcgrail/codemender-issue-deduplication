@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "8f7546d7",
+    "severity": "HIGH",
+    "vuln_type": "Command Injection",
+    "file_path": "powershell_completions.go",
+    "title": "Arbitrary Command Execution via PowerShell Autocompletion Script (Invoke-Expression)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary Command Execution via PowerShell Autocompletion Script (Invoke-Expression)",
+    "snippet": ""
+  },
+  {
+    "finding_id": "fc0723c4",
+    "severity": "HIGH",
+    "vuln_type": "Command Injection",
+    "file_path": "bash_completionsV2.go",
+    "title": "Arbitrary Command Execution via Bash Completion V2 Script (eval)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary Command Execution via Bash Completion V2 Script (eval)",
+    "snippet": ""
+  },
+  {
+    "finding_id": "ef88d1e9",
+    "severity": "HIGH",
+    "vuln_type": "Command Injection",
+    "file_path": "bash_completions.go",
+    "title": "Arbitrary Command Execution via Bash Completion V1 Script (eval)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary Command Execution via Bash Completion V1 Script (eval)",
+    "snippet": ""
+  },
+  {
+    "finding_id": "31e054b4",
+    "severity": "HIGH",
+    "vuln_type": "Command Injection",
+    "file_path": "zsh_completions.go",
+    "title": "Arbitrary Command Execution via Zsh Completion Script (eval)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary Command Execution via Zsh Completion Script (eval)",
+    "snippet": ""
+  },
+  {
+    "finding_id": "d6bce44f",
+    "severity": "HIGH",
+    "vuln_type": "Command Injection",
+    "file_path": "fish_completions.go",
+    "title": "Arbitrary Command Execution via Fish Completion Script (eval)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary Command Execution via Fish Completion Script (eval)",
+    "snippet": ""
+  }
+]

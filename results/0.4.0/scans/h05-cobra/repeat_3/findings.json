@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "ffd92c12-6532-58da-9cbf-6be321670748",
+    "SessionID": "ChA4MzJmZjEwMTEzNDVkZWM0EAgaATAqBG1haW4",
+    "Title": "PowerShell Command Injection in Generated Completion Script via Invoke-Expression",
+    "FilePath": "/home/jfplante_google_com/repos/h05-cobra_rep3/powershell_completions.go",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In powershell_completions.go, the generated PowerShell completion script uses `Invoke-Expression` to run `$RequestComp`, which is constructed from the command elements input by the user during command line interaction/completion (specifically `$CommandAst.CommandElements`).\nSince `$Command` is built directly from the untrusted command arguments typed in PowerShell, if a user types a command with shell metacharacters or payloads in the argument, those elements are split into `$Program` and `$Arguments` and executed via `Invoke-Expression`.\nThis results in arbitrary PowerShell Command Injection / Code Execution in the context of the user's PowerShell session when completing commands.\n\nSource: $CommandAst.CommandElements (the user's command line input to trigger tab completion)\nSanitization: None\nSink: Invoke-Expression -OutVariable out \"$RequestComp\" 2\u003e\u00261 | Out-Null\n\nConceptual Exploit Payload:\nTo trigger arbitrary command execution when tab-completing a cobra-based tool (e.g. `mycmd`):\nType: `mycmd ; Start-Process calc ;` then press TAB.\nThis constructs a Command string which is executed by Invoke-Expression, triggering the injection payload (e.g., launching calculator).",
+    "Snippet": "    #call the command store the output in $out and redirect stderr and stdout to null\n    # $Out is an array contains each line per element\n    Invoke-Expression -OutVariable out \"$RequestComp\" 2\u003e\u00261 | Out-Null",
+    "VulnType": "Command Injection",
+    "VulnID": "CWE-78",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 127,
+    "EndLine": 130,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

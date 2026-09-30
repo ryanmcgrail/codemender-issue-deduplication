@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "d506da19-e594-59be-a73c-edbc48017a55",
+    "session_id": "ChA5N2Q5Njc4ZmFlYWM3YmIzEAgaATAqBG1haW4",
+    "title": "PHP Object Injection / Remote Code Execution in Monolog ServerLogCommand",
+    "file_path": "/home/jfplante_google_com/repos/p38-symfony_rep1/src/Symfony/Bridge/Monolog/Command/ServerLogCommand.php",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "The `ServerLogCommand` starts a TCP server (`stream_socket_server()`) listening on a configurable host/port (defaulting to `0.0.0.0:9911`). When a connection is established, the command reads the incoming messages via a loop and directly unserializes them using PHP's native `unserialize()` function after decoding from base64. Because the unserialization is done without any restrictions on allowed classes, any remote attacker who can access the port can perform PHP Object Injection. By chaining available gadget classes in the application's autoloader, this can lead to Remote Code Execution (RCE).\n\n### Data Flow Path\n- **Source**: Untrusted network input is read from the TCP socket using `fgets()` in `getLogs()` on line 133 and yielded to line 108.\n- **Sanitization/Validation**: No validation is performed on the decoded message. It is only passed to `base64_decode()`.\n- **Sink**: The native `unserialize()` function on line 109.\n\n### Conceptual Exploit Payload\nAn attacker can generate a malicious serialized object using a PHP gadget chain (e.g. using `phpggc`) and send it to the open port:\n```bash\n# Generate payload using phpggc (e.g., Guzzle/RCE1 or any other available chain)\npayload=$(phpggc Guzzle/RCE1 system 'id' | base64 -w0)\n\n# Connect to the log server and trigger RCE\necho \"$payload\" | nc \u003ctarget-ip\u003e 9911\n```",
+    "snippet": "            $record = unserialize(base64_decode($message));",
+    "vuln_type": "Insecure Deserialization",
+    "vuln_id": "CWE-502",
+    "status": "OPEN",
+    "start_line": 109,
+    "end_line": 109
+  }
+]

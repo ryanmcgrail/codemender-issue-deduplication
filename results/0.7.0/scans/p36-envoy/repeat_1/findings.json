@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "2a8822d9-717d-5946-b612-f4b722785cfc",
+    "session_id": "ChA4NGQxNTM2NGEzZDQ4OTMxEAgaATAqBG1haW4",
+    "title": "Remote Denial of Service (DoS) via Reachable Assertion in UDP DNS Filter",
+    "file_path": "source/extensions/filters/udp/dns_filter/dns_parser.cc",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Vulnerability Trace\n\n1. **Source**: An untrusted external client sends a UDP DNS query packet to Envoy's UDP DNS filter.\n2. **Parsing**:\n   - `DnsFilter::onData(Network::UdpRecvData\u0026 client_request)` is triggered upon packet receipt.\n   - It calls `DnsMessageParser::createQueryContext(client_request, ...)`.\n   - This in turn invokes `DnsMessageParser::parseDnsObject(context, buffer)` which parses the DNS packet.\n   - It loops over the questions and calls `parseDnsQueryRecord(buffer, offset)`.\n   - `parseDnsQueryRecord` calls `parseDnsNameRecord(buffer, available_bytes, offset)`.\n   - `parseDnsNameRecord` invokes `ares_expand_name(record, linearized_data, buffer-\u003elength(), \u0026output, \u0026encoded_len)` to expand the query domain name.\n   - The expanded string is assigned to `record_name` and then stored in the `DnsQueryRecord::name_` field.\n   - There is no length check on `record_name` in `parseDnsQueryRecord` or `parseDnsNameRecord`.\n3. **Trigger (Sink)**:\n   - When preparing the DNS response, `DnsMessageParser::buildResponseBuffer` is called.\n   - It iterates through the queries and encounters:\n     ```cpp\n     RELEASE_ASSERT(query-\u003ename_.size() \u003c MAX_NAME_LENGTH,\n                    \"Query name is too large for serialization\");\n     ```\n   - If the expanded name is 255 characters or more, the assertion fails, calling `abort()` and crashing the entire Envoy process.\n\n### Conceptual Exploit Payload\n\nAn attacker can construct a DNS query packet containing a single question of type `A`, `AAAA`, or `SRV`. The domain name in the query can consist of four labels of 63 characters each (e.g., `a...a.b...b.c...c.d...d` where each label has length 63).\n\nThe total length of the expanded name string will be:\n`63 + 1 + 63 + 1 + 63 + 1 + 63 = 255` characters.\n\nWhen this UDP packet is processed by Envoy:\n1. `ares_expand_name` successfully expands the domain name to the 255-character string.\n2. `DnsMessageParser::buildResponseBuffer` is called to prepare the response.\n3. It evaluates `query-\u003ename_.size() \u003c 255`. Since `255 \u003c 255` is `false`, the `RELEASE_ASSERT` is triggered, immediately terminating the Envoy proxy process.",
+    "snippet": "      RELEASE_ASSERT(query-\u003ename_.size() \u003c MAX_NAME_LENGTH,\n                     \"Query name is too large for serialization\");",
+    "vuln_type": "CWE-617: Reachable Assertion",
+    "vuln_id": "CWE-617",
+    "status": "OPEN",
+    "start_line": 503,
+    "end_line": 504
+  }
+]

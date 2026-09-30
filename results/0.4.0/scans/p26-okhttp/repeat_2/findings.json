@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "52c1a864-30d4-50f2-930c-7f642cf36b3e",
+    "SessionID": "ChBkMjA3NjFlYmRjZjdhMmRmEAgaATAqBG1haW4",
+    "Title": "Discrepancy in IP address trailing dot verification in OkHostnameVerifier",
+    "FilePath": "/home/jfplante_google_com/repos/p26-okhttp_rep2/okhttp/src/main/kotlin/okhttp3/internal/tls/OkHostnameVerifier.kt",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "In OkHostnameVerifier (which is OkHttp's standard HostnameVerifier), when checking if a server certificate matches the requested hostname, OkHttp performs a verification process using `verifyHostname(hostname: String, certificate: X509Certificate)`:\n```kotlin\n  private fun verifyHostname(hostname: String, certificate: X509Certificate): Boolean {\n    val hostname = hostname.asciiToLowercase()\n    return getSubjectAltNames(certificate, ALT_DNS_NAME).any {\n      verifyHostname(hostname, it)\n    }\n  }\n```\nIf the requested hostname ends with a dot (representing an absolute domain name), OkHostnameVerifier normalizes both the hostname and the pattern to end with a dot before performing matches (or wildcard matches):\n```kotlin\n    if (!hostname.endsWith(\\\".\\\")) {\n      hostname += \\\".\\\"\n    }\n    if (!pattern.endsWith(\\\".\\\")) {\n      pattern += \\\".\\\"\n    }\n```\nHowever, under `verifyIpAddress(ipAddress: String, certificate: X509Certificate)`:\n```kotlin\n  private fun verifyIpAddress(ipAddress: String, certificate: X509Certificate): Boolean {\n    val canonicalIpAddress = ipAddress.toCanonicalHost()\n\n    return getSubjectAltNames(certificate, ALT_IPA_NAME).any {\n      canonicalIpAddress == it.toCanonicalHost()\n    }\n  }\n```\nIf the user passes an IP address that ends with a trailing dot (e.g. `127.0.0.1.`), `ipAddress.canParseAsIpAddress()` evaluates to true because the regex in `Util.kt` allows trailing dots:\n```kotlin\nprivate val VERIFY_AS_IP_ADDRESS =\n    \\\"([0-9a-fA-F]*:[0-9a-fA-F:.]*)|([\\\\\\\\d.]+)\\\".toRegex()\n```\nWhen `toCanonicalHost()` is called on `127.0.0.1.`, the trailing dot is processed. But `getSubjectAltNames(certificate, ALT_IPA_NAME)` returns IP addresses as defined in the Subject Alternative Name (typically standard IP addresses like `127.0.0.1` without a trailing dot). \n\nIf the certificate's SAN contains `127.0.0.1` and `canonicalIpAddress` yields `127.0.0.1` (or if `127.0.0.1.` fails canonicalization/matches unexpectedly), there can be discrepancies in how hostnames/IP addresses ending in trailing dots are verified against SANs depending on platform implementations of `toCanonicalHost` / `InetAddress.getByAddress()`.\n\nSpecifically, if the request is made to `127.0.0.1.`, and the certificate is issued to `127.0.0.1`, a strict comparison `canonicalIpAddress == it.toCanonicalHost()` may fail because of trailing dot mismatches or handling. This can cause legitimate HTTPS connections to fail, or bypasses under certain conditions where input host is parsed differently from SANs.\n\nConceptual Exploit Payload:\nAn HTTPS request using OkHttpClient targeting `https://127.0.0.1./` against a server presenting a certificate valid for `127.0.0.1`. If `toCanonicalHost()` on `127.0.0.1.` does not normalize the trailing dot correctly or the verification against SAN IP address `127.0.0.1` fails/mismatches, it causes SSL/TLS handshake verification failures or bypasses.",
+    "Snippet": "  private fun verifyIpAddress(ipAddress: String, certificate: X509Certificate): Boolean {\n    val canonicalIpAddress = ipAddress.toCanonicalHost()\n\n    return getSubjectAltNames(certificate, ALT_IPA_NAME).any {\n      canonicalIpAddress == it.toCanonicalHost()\n    }\n  }",
+    "VulnType": "Improper Certificate Validation",
+    "VulnID": "CWE-295",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 60,
+    "EndLine": 66,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

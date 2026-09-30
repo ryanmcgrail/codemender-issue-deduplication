@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "2ccb94a4-c19e-5d12-b20f-905a221af94c",
+    "session_id": "ChBiMGI2OTgwMDE4Y2NiYzAwEAgaATAqBG1haW4",
+    "title": "XML External Entity (XXE) Injection in _LxmlFrameParser._parse_doc",
+    "file_path": "/home/jfplante_google_com/repos/h02-pandas_rep1/pandas/io/xml.py",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "Data Flow Analysis:\n- Source: External/untrusted XML input provided to `pandas.read_xml(path_or_buffer, parser='lxml')`, where `path_or_buffer` can be an XML string, file path, URL, or stream.\n- Sanitization/Validation: None. The XML data is passed to `_LxmlFrameParser._parse_doc()` without validating or disabling entity resolution.\n- Sink: `lxml.etree.fromstring` (line 647) and `lxml.etree.parse` (line 651), configured with `curr_parser = XMLParser(encoding=self.encoding)`. In `lxml`, `XMLParser` enables entity resolution by default (`resolve_entities=True`).\n\nWhen parsing untrusted XML data containing external entity references (such as `\u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e`), `lxml` resolves the entity and substitutes file contents into the parsed XML nodes. When pandas builds the DataFrame from these nodes, the sensitive file contents are extracted and returned to the application, resulting in local file disclosure.\n\nConceptual Exploit Payload:\n```xml\n\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE data [\n  \u003c!ELEMENT data ANY\u003e\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e\n]\u003e\n\u003cdata\u003e\n  \u003crow\u003e\n    \u003csecret\u003e\u0026xxe;\u003c/secret\u003e\n  \u003c/row\u003e\n\u003c/data\u003e\n```\nWhen `pd.read_xml(payload, parser=\"lxml\")` is executed, the resulting DataFrame contains the contents of `/etc/passwd` in the `secret` column.\n\nRemediation:\nInstantiate the `lxml.etree.XMLParser` with `resolve_entities=False`.",
+    "snippet": "        with preprocess_data(handle_data) as xml_data:\n            curr_parser = XMLParser(encoding=self.encoding)\n\n            if isinstance(xml_data, io.StringIO):\n                if self.encoding is None:\n                    raise TypeError(\n                        \"Can not pass encoding None when input is StringIO.\"\n                    )\n\n                document = fromstring(\n                    xml_data.getvalue().encode(self.encoding), parser=curr_parser\n                )\n            else:\n                document = parse(xml_data, parser=curr_parser)",
+    "vuln_type": "XML External Entity Reference (XXE)",
+    "vuln_id": "CWE-611",
+    "status": "OPEN",
+    "start_line": 638,
+    "end_line": 651
+  },
+  {
+    "finding_id": "2db65d56-3755-5c0a-89a9-bf1608aeedaa",
+    "session_id": "ChA0MmIzZjIyODE1NTFjZDdhEAgaATAqBG1haW4",
+    "title": "Out-of-bounds read in Buffer_EscapeStringValidated via off-by-one UTF-8 boundary checks",
+    "file_path": "/home/jfplante_google_com/repos/h02-pandas_rep1/pandas/_libs/src/vendored/ujson/lib/ultrajsonenc.c",
+    "severity": "MEDIUM",
+    "confidence": 95,
+    "analysis": "In `pandas/_libs/src/vendored/ujson/lib/ultrajsonenc.c`, the function `Buffer_EscapeStringValidated` validates and escapes UTF-8 sequences when encoding strings to JSON. \n\nWhen encountering multi-byte UTF-8 lead bytes (cases 2, 3, and 4 in the switch statement), the function checks whether sufficient bytes remain between the current pointer `io` and the buffer end `end`:\n- In `case 2` (2-byte UTF-8 sequence), it checks:\n  `if (end - io \u003c 1)`\n  followed by `memcpy(\u0026in16, io, sizeof(JSUTF16));` (reading 2 bytes).\n- In `case 3` (3-byte UTF-8 sequence), it checks:\n  `if (end - io \u003c 2)`\n  followed by `memcpy(\u0026in16, io, sizeof(JSUTF16)); memcpy(\u0026in8, io + 2, sizeof(JSUINT8));` (reading 3 bytes).\n- In `case 4` (4-byte UTF-8 sequence), it checks:\n  `if (end - io \u003c 3)`\n  followed by `memcpy(\u0026in, io, sizeof(JSUTF32));` (reading 4 bytes).\n\nBecause `io` points to the lead byte and has not yet been advanced, `end - io` is the total number of bytes remaining in the buffer. The checks `\u003c 1`, `\u003c 2`, and `\u003c 3` are off-by-one errors (confusing the number of continuation bytes required with the total sequence length).\n\n**Data Flow**:\n- **Source**: Untrusted string input passed to the JSON encoder (e.g., via `pandas.read_json` or `to_json` or serialization APIs).\n- **Sanitization/Validation**: The bounds check `end - io \u003c N` incorrectly allows buffers with `end - io == 1` for 2-byte UTF-8, `end - io == 2` for 3-byte UTF-8, and `end - io == 3` for 4-byte UTF-8 to pass without error.\n- **Sink**: `memcpy` reads beyond `end` into adjacent memory (1 byte out-of-bounds read).\n\n**Conceptual Exploit Payload**:\nProvide a string ending with a truncated UTF-8 sequence right at the buffer boundary:\n- Case 2: A string ending with `\\xc2` (1 byte remaining: `end - io == 1`).\n- Case 3: A string ending with `\\xe2\\x82` (2 bytes remaining: `end - io == 2`).\n- Case 4: A string ending with `\\xf0\\x90\\x80` (3 bytes remaining: `end - io == 3`).\nWhen `Buffer_EscapeStringValidated` processes this input, the boundary check evaluates to false, causing `memcpy` to read 1 byte past `end` of the buffer, leading to out-of-bounds memory read / information disclosure or segmentation fault.",
+    "snippet": "      if (end - io \u003c 1) {\n        enc-\u003eoffset += (of - enc-\u003eoffset);\n        SetError(obj, enc, \"Unterminated UTF-8 sequence when encoding string\");\n        return FALSE;\n      }\n\n      memcpy(\u0026in16, io, sizeof(JSUTF16));",
+    "vuln_type": "Buffer Over-read",
+    "vuln_id": "CWE-125",
+    "status": "OPEN",
+    "start_line": 548,
+    "end_line": 620
+  }
+]

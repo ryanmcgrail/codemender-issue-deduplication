@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "35a49584-b4ea-5d2d-92f1-18468fc66894",
+    "session_id": "ChA5YzE2NDQ3NjJhZTIxZTI1EAgaATAqBG1haW4",
+    "title": "SQL Injection in locate Function via Unescaped String Concatenation",
+    "file_path": "/home/jfplante_google_com/repos/h09-exposed_rep1/exposed-core/src/main/kotlin/org/jetbrains/exposed/sql/vendors/PostgreSQL.kt",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "The Exposed SQL framework provides a query DSL extension function `Expression\u003cT\u003e.locate(substring: String): Locate\u003cT\u003e` (defined in `org.jetbrains.exposed.sql.SQLExpressionBuilder.kt`), which instantiates `Locate(this, substring)`. When translated to SQL via `Locate.toQueryBuilder`, the dialect-specific `FunctionProvider.locate` method is invoked.\n\nIn dialect implementations (such as PostgreSQL, MySQL, H2, SQLite, SQL Server, and Oracle), the `substring` parameter is concatenated directly into the raw SQL string literal without parameterized queries (e.g., without using prepared statement placeholders `?` or `stringParam`) and without escaping single quote characters.\n\nFor example, in `PostgreSQL.kt` (lines 75-81):\n```kotlin\noverride fun \u003cT : String?\u003e locate(\n    queryBuilder: QueryBuilder,\n    expr: Expression\u003cT\u003e,\n    substring: String\n) = queryBuilder {\n    append(\"POSITION(\\\\'\", substring, \"\\' IN \", expr, \")\")\n}\n```\n\nSimilarly, in `MysqlDialect.kt` / `H2.kt`:\n```kotlin\nappend(\"LOCATE(\\\\'\", substring, \"\\',\", expr, \")\")\n```\nAnd in `SQLiteDialect.kt` / `OracleDialect.kt`:\n```kotlin\nappend(\"INSTR(\", expr, \",\\\\'\", substring, \"\\\\')\")\n```\n\n**Data Flow Tracing**:\n- **Source**: Untrusted user input passed into `Expression\u003cT\u003e.locate(substring: String)` (e.g., `UsersTable.name.locate(searchTerm)`).\n- **Sanitization/Validation**: None. The `substring` parameter is passed as a raw string directly to `FunctionProvider.locate`.\n- **Sink**: The string is appended directly into `queryBuilder` inside `FunctionProvider.locate(queryBuilder, expr, substring)` using raw string interpolation.\n\n**Conceptual Exploit Payload**:\nIf a web application exposes an endpoint allowing users to search by index:\n`GET /users/search?term=foo\\'%20IN%20name)%20=%201%20OR%20(SELECT%201%20FROM%20pg_sleep(5))%20IS%20NOT%20NULL%20--`\nThe generated SQL becomes:\n`SELECT ... WHERE POSITION('foo' IN name) = 1 OR (SELECT 1 FROM pg_sleep(5)) IS NOT NULL --' IN name)`\nwhich breaks out of the `POSITION(...)` string boundary and executes arbitrary SQL queries.",
+    "snippet": "    override fun \u003cT : String?\u003e locate(\n        queryBuilder: QueryBuilder,\n        expr: Expression\u003cT\u003e,\n        substring: String\n    ) = queryBuilder {\n        append(\"POSITION(\\\\'\", substring, \"\\' IN \", expr, \")\")\n    }",
+    "vuln_type": "SQL Injection",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 75,
+    "end_line": 81
+  },
+  {
+    "finding_id": "a6dc1290-1d85-5963-a901-f4383b7cda5e",
+    "session_id": "ChA5YzE2NDQ3NjJhZTIxZTI1EAgaATAqBG1haW4",
+    "title": "SQL Injection in MySQL Full-Text MATCH Function via Unescaped Pattern String",
+    "file_path": "/home/jfplante_google_com/repos/h09-exposed_rep1/exposed-core/src/main/kotlin/org/jetbrains/exposed/sql/vendors/MysqlDialect.kt",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "In `MysqlDialect.kt`, the `Expression\u003cT\u003e.match(pattern: String, mode: MatchMode? = null)` DSL method creates a `MATCH` operation (`MysqlDialect.MATCH`) for full-text search against MySQL/MariaDB databases.\n\nIn `MATCH.toQueryBuilder` (lines 91-95 of `MysqlDialect.kt`), the `pattern` string is concatenated directly into the SQL string inside the `AGAINST ('...')` clause without parameterization or character escaping:\n```kotlin\nprivate class MATCH(val expr: Expression\u003c*\u003e, val pattern: String, val mode: MatchMode) : Op\u003cBoolean\u003e() {\n    override fun toQueryBuilder(queryBuilder: QueryBuilder) = queryBuilder {\n        append(\"MATCH(\", expr, \") AGAINST ('\", pattern, \"' \", mode.mode(), \")\")\n    }\n}\n```\n\n**Data Flow Tracing**:\n- **Source**: Untrusted user input passed into `Expression\u003cT\u003e.match(pattern: String)` (e.g., `ArticlesTable.content.match(searchQuery)`).\n- **Sanitization/Validation**: None. The `pattern` string is not escaped or parameterized with prepared statement markers (`?`).\n- **Sink**: `queryBuilder.append(\"MATCH(\", expr, \") AGAINST ('\", pattern, \"' \", mode.mode(), \")\")`.\n\n**Conceptual Exploit Payload**:\nIf a web application exposes a search feature using Exposed's `match`:\n`GET /articles?q=test')+OR+1=1+--+`\nThe generated MySQL query becomes:\n`SELECT ... WHERE MATCH(articles.content) AGAINST ('test') OR 1=1 -- ' IN BOOLEAN MODE)`\nallowing an attacker to bypass search filters or execute arbitrary boolean/time-based SQL injections.",
+    "snippet": "    private class MATCH(val expr: Expression\u003c*\u003e, val pattern: String, val mode: MatchMode) : Op\u003cBoolean\u003e() {\n        override fun toQueryBuilder(queryBuilder: QueryBuilder) = queryBuilder {\n            append(\"MATCH(\", expr, \") AGAINST ('\", pattern, \"' \", mode.mode(), \")\")\n        }\n    }",
+    "vuln_type": "SQL Injection",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 91,
+    "end_line": 95
+  },
+  {
+    "finding_id": "873b8fce-9d89-5a29-b086-f9d42d0de182",
+    "session_id": "ChA5YzE2NDQ3NjJhZTIxZTI1EAgaATAqBG1haW4",
+    "title": "SQL Injection in JSON Path Extraction Functions via Direct String Interpolation",
+    "file_path": "/home/jfplante_google_com/repos/h09-exposed_rep1/exposed-core/src/main/kotlin/org/jetbrains/exposed/sql/vendors/PostgreSQL.kt",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "The Exposed JSON module provides the `ExpressionWithColumnType\u003c*\u003e.extract(vararg path: String, toScalar: Boolean = true)` function (in `JsonFunctions.kt`), which invokes `currentDialect.functionProvider.jsonExtract(...)`.\n\nIn PostgreSQL dialect (`PostgreSQL.kt` lines 144-156) and other dialect implementations (such as SQLite, MySQL, SQL Server, and Oracle), each element of the `path` vararg string array is directly interpolated into the query builder wrapped in quotes without parameterization or escaping.\n\nIn `PostgreSQL.kt`:\n```kotlin\noverride fun \u003cT\u003e jsonExtract(\n    expression: Expression\u003cT\u003e,\n    vararg path: String,\n    toScalar: Boolean,\n    jsonType: IColumnType\u003c*\u003e,\n    queryBuilder: QueryBuilder\n) = queryBuilder {\n    append(\"${jsonType.sqlType()}_EXTRACT_PATH\")\n    if (toScalar) append(\"_TEXT\")\n    append(\"(\", expression, \", \")\n    path.ifEmpty { arrayOf(\"$\") }.appendTo { +\"'$it'\" }\n    append(\")\")\n}\n```\nSimilarly, `MysqlDialect.kt` lines 136-138 interpolates `+\"\\\"$$it\\\"\"` directly into `JSON_EXTRACT`, and `SQLiteDialect.kt` line 140 interpolates `+\"'$$it'\"`.\n\n**Data Flow Tracing**:\n- **Source**: Untrusted user input passed into `extract(path)` or `contains(..., path)` or `exists(path)`.\n- **Sanitization/Validation**: None. The `path` strings are not sanitized, escaped, or mapped to JDBC bind parameters.\n- **Sink**: `path.appendTo { +\"'$it'\" }` in `jsonExtract` directly emits raw SQL into the QueryBuilder.\n\n**Conceptual Exploit Payload**:\nIf a web application allows dynamic JSON field extraction based on a user-specified path parameter:\n`GET /data?field=foo%27,%20(SELECT%20version()))%20--`\nThe generated PostgreSQL query becomes:\n`JSONB_EXTRACT_PATH_TEXT(table.json_col, 'foo', (SELECT version())) --')`\nallowing an attacker to break out of the string argument and execute arbitrary subqueries or SQL injection payloads.",
+    "snippet": "    override fun \u003cT\u003e jsonExtract(\n        expression: Expression\u003cT\u003e,\n        vararg path: String,\n        toScalar: Boolean,\n        jsonType: IColumnType\u003c*\u003e,\n        queryBuilder: QueryBuilder\n    ) = queryBuilder {\n        append(\"${jsonType.sqlType()}_EXTRACT_PATH\")\n        if (toScalar) append(\"_TEXT\")\n        append(\"(\", expression, \", \")\n        path.ifEmpty { arrayOf(\"$\") }.appendTo { +\"'$it'\" }\n        append(\")\")\n    }",
+    "vuln_type": "SQL Injection",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 144,
+    "end_line": 156
+  },
+  {
+    "finding_id": "ca2635ef-2842-5a16-adc9-2796c7a7e0fe",
+    "session_id": "ChA5YzE2NDQ3NjJhZTIxZTI1EAgaATAqBG1haW4",
+    "title": "SQL Injection in concat and groupConcat via Unescaped Delimiter Parameter",
+    "file_path": "/home/jfplante_google_com/repos/h09-exposed_rep1/exposed-core/src/main/kotlin/org/jetbrains/exposed/sql/vendors/FunctionProvider.kt",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "In `FunctionProvider.kt` and vendor dialect overrides (`PostgreSQL.kt`, `SQLiteDialect.kt`, `OracleDialect.kt`, `SQLServerDialect.kt`), the string concatenation functions `concat` and `groupConcat` accept a string delimiter parameter (`separator`) which is directly embedded into the generated SQL query string inside quotes without parameterization or escaping.\n\nIn `FunctionProvider.kt`:\n- `concat` (lines 72-80):\n```kotlin\nopen fun concat(separator: String, queryBuilder: QueryBuilder, vararg expr: Expression\u003c*\u003e): Unit = queryBuilder {\n    if (separator == \"\") {\n        append(\"CONCAT(\")\n    } else {\n        append(\"CONCAT_WS('\", separator, \"',\")\n    }\n    expr.appendTo { +it }\n    append(\")\")\n}\n```\n- `groupConcat` (lines 100-102):\n```kotlin\nexpr.separator?.let {\n    append(\" SEPARATOR '$it'\")\n}\n```\nIn `PostgreSQL.kt` (lines 58-60):\n```kotlin\nappend(\"STRING_AGG(\")\nif (expr.distinct) append(\" DISTINCT \")\nappend(expr.expr, \", '\", expr.separator, \"'\")\n```\nIn `SQLiteDialect.kt` (lines 41-43):\n```kotlin\nexpr.toList().appendTo(this, separator = \" || '$separator' || \") { +it }\n```\n\n**Data Flow Tracing**:\n- **Source**: Untrusted user input passed into `Expression\u003cT\u003e.groupConcat(separator: String?)` or `Concat(separator: String, ...)` (e.g., dynamic export or formatting delimiter provided by user request).\n- **Sanitization/Validation**: None. The `separator` string is not escaped or bound as a query parameter.\n- **Sink**: The separator is appended directly into `queryBuilder` in SQL string literals.\n\n**Conceptual Exploit Payload**:\nIf a web application allows users to customize delimiter formatting when querying grouped data:\n`GET /export?delimiter=test%27)%20FROM%20users%20UNION%20SELECT%20password%20FROM%20admins%20--`\nIn PostgreSQL, `STRING_AGG(name, '\u003cdelimiter\u003e')` becomes:\n`STRING_AGG(name, 'test') FROM users UNION SELECT password FROM admins --')`\nallowing the attacker to escape the function call and inject arbitrary SQL clauses.",
+    "snippet": "    open fun concat(separator: String, queryBuilder: QueryBuilder, vararg expr: Expression\u003c*\u003e): Unit = queryBuilder {\n        if (separator == \"\") {\n            append(\"CONCAT(\")\n        } else {\n            append(\"CONCAT_WS('\", separator, \"',\")\n        }\n        expr.appendTo { +it }\n        append(\")\")\n    }\n\n    /**\n     * SQL function that concatenates strings from a group into a single string.\n     *\n     * @param expr Group concat options.\n     * @param queryBuilder Query builder to append the SQL function to.\n     */\n    open fun \u003cT : String?\u003e groupConcat(expr: GroupConcat\u003cT\u003e, queryBuilder: QueryBuilder): Unit = queryBuilder {\n        append(\"GROUP_CONCAT(\")\n        if (expr.distinct) {\n            append(\"DISTINCT \")\n        }\n        append(expr.expr)\n        if (expr.orderBy.isNotEmpty()) {\n            append(\" ORDER BY \")\n            expr.orderBy.appendTo { (expression, sortOrder) -\u003e\n                currentDialect.dataTypeProvider.precessOrderByClause(this, expression, sortOrder)\n            }\n        }\n        expr.separator?.let {\n            append(\" SEPARATOR '$it'\")\n        }\n        append(\")\")\n    }",
+    "vuln_type": "SQL Injection",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 72,
+    "end_line": 104
+  }
+]

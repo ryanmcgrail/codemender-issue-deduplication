@@ -1,0 +1,38 @@
+[
+  {
+    "finding_id": "5c5874b7",
+    "severity": "MEDIUM",
+    "vuln_type": "Open Redirect",
+    "file_path": "lib/sidekiq/web/action.rb",
+    "title": "Open Redirect in Sidekiq::WebAction#reload_page via Referer Header",
+    "confidence": 90,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Open Redirect in Sidekiq::WebAction#reload_page via Referer Header",
+    "snippet": ""
+  },
+  {
+    "finding_id": "fccbd973",
+    "severity": "HIGH",
+    "vuln_type": "Cross-site Scripting",
+    "file_path": "lib/sidekiq/web/helpers.rb",
+    "title": "Stored Cross-Site Scripting (XSS) in filter_link helper via unescaped href attribute",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Stored Cross-Site Scripting (XSS) in filter_link helper via unescaped href attribute",
+    "snippet": ""
+  },
+  {
+    "finding_id": "d687db3a",
+    "severity": "HIGH",
+    "vuln_type": "Cross-site Scripting",
+    "file_path": "web/views/dead.erb",
+    "title": "Stored Cross-Site Scripting (XSS) in dead job view via unescaped error_class",
+    "confidence": 90,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Stored Cross-Site Scripting (XSS) in dead job view via unescaped error_class",
+    "snippet": ""
+  }
+]

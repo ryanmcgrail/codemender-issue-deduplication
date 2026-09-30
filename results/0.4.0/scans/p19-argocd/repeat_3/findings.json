@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "3f3e987c-46cf-5939-b75e-3973407ea68e",
+    "SessionID": "ChBhY2MxZmYxY2M1ZDQzNjJiEAgaATAqBG1haW4",
+    "Title": "Path Traversal Bypass in EnforceToCurrentRoot due to Missing Path Cleaning",
+    "FilePath": "util/security/path_traversal.go",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In `util/security/path_traversal.go`, the function `EnforceToCurrentRoot` checks if a `requestedPath` is on or under `currentRoot`. \nHowever, it does not clean or evaluate the `requestedPath` using `filepath.Clean` or `filepath.Abs` before validating it or returning it.\nInstead, it splits the `requestedPath` using `parsePath` into `requestedDir` (which is `filepath.Dir(requestedPath)`) and `requestedFile` (which is `filepath.Base(requestedPath)`).\nSince `filepath.Dir` preserves trailing relative elements if they are part of the input without resolving them, and `isRequestedDirUnderCurrentRoot` does not call `filepath.Clean` on `requestedDir` either, a path traversal bypass is possible.\n\nSpecifically:\nIf `currentRoot` is `/home/argo/helmapp`, and `requestedPath` is `/home/argo/helmapp/../../etc/passwd`, `parsePath` returns:\n- `requestedDir` = `/home/argo/helmapp/../..`\n- `requestedFile` = `passwd`\n\n`isRequestedDirUnderCurrentRoot` receives `currentRoot = \\\"/home/argo/helmapp\\\"` and `requestedPath = \\\"/home/argo/helmapp/../..\\\"`.\nIt adds a trailing slash to `requestedPath` to make it `/home/argo/helmapp/../../`.\nIt checks if `/home/argo/helmapp/../../` has prefix `/home/argo/helmapp/` (after adding trailing slashes).\nIndeed, `/home/argo/helmapp/../../` starts with `/home/argo/helmapp/`!\nSo `strings.HasPrefix(requestedPath, currentRoot)` returns `true`!\n\nThen, the function returns:\n`requestedDir + string(filepath.Separator) + requestedFile` which is `/home/argo/helmapp/../../passwd`, allowing complete directory traversal and out-of-bounds file access.\n\nThis function is used in `AppFilesHaveChanged` to verify if modified files are within designated refresh paths, but it is also a general utility function in the codebase.\nBecause there is no sanitization or cleaning of the requestedPath before calling `strings.HasPrefix`, any string starting with the prefix `/home/argo/helmapp` (e.g. `/home/argo/helmapp/../..`) will bypass the check.\n\nConceptual Exploit Payload:\nSetting a file change path or a requested file path to:\n`/home/argo/helmapp/../../etc/passwd`\nwill bypass the check and resolve to `/home/argo/helmapp/../../passwd` (i.e. `/home/etc/passwd` or `/etc/passwd`), accessing files outside of the `currentRoot` directory boundary.",
+    "Snippet": "func EnforceToCurrentRoot(currentRoot, requestedPath string) (string, error) {\n\tcurrentRoot = filepath.Clean(currentRoot)\n\trequestedDir, requestedFile := parsePath(requestedPath)\n\tif !isRequestedDirUnderCurrentRoot(currentRoot, requestedDir) {\n\t\treturn \"\", fmt.Errorf(\"requested path %s should be on or under current directory %s\", requestedPath, currentRoot)\n\t}\n\treturn requestedDir + string(filepath.Separator) + requestedFile, nil\n}",
+    "VulnType": "Path Traversal",
+    "VulnID": "CWE-22",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 11,
+    "EndLine": 18,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

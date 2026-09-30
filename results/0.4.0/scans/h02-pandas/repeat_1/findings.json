@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "ebceef0f-2ec9-5f6f-bb98-92e626a1a11f",
+    "SessionID": "ChBmYzZkNTYxMDA2ODVjMmIwEAgaATAqBG1haW4",
+    "Title": "Stored Cross-Site Scripting (XSS) via Untrusted RSS Feed in Jinja2 Template Rendering",
+    "FilePath": "web/pandas_web.py",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability Details\nThe `web/pandas_web.py` script parses external RSS/Atom feeds configured in `config.yml` under `blog.feed`. When parsing these feeds, it uses the `feedparser` library to retrieve entry details (such as `entry.title`, `entry.author`, and `entry.summary`), which are then inserted into the Jinja2 template rendering context.\n\nHowever, the Jinja2 environment is instantiated on line 452 without enabling autoescaping:\n```python\njinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(templates_path))\n```\nIn Jinja2, the `Environment` does not autoescape HTML/JS payloads by default unless `autoescape=True` (or a suitable autoescape selector function/extension) is explicitly passed.\n\nWhen rendering `web/pandas/community/blog/index.html`, the template inserts these values using `{{ post.title }}`, `{{ post.author }}`, and `{{ post.summary }}`:\n```html\n\u003ch5 class=\\\"card-title\\\"\u003e\u003ca href=\\\"...\\\" target=\\\"_blank\\\"\u003e{{ post.title }}\u003c/a\u003e\u003c/h5\u003e\n\u003ch6 class=\\\"card-subtitle text-muted small mb-4\\\"\u003eSource: {{ post.feed }} | Author: {{ post.author }} | Published: {{ post.published.strftime(\\\"%b %d, %Y\\\") }}\u003c/h6\u003e\n\u003cdiv class=\\\"card-text mb-2\\\"\u003e{{ post.summary }}\u003c/div\u003e\n```\nSince autoescaping is disabled, if a malicious feed serves a post containing malicious JavaScript/HTML in `title`, `author`, `summary`, or `feed_name`, the injected scripts will be written directly into the generated HTML files without escaping, leading to a Stored Cross-Site Scripting (XSS) vulnerability.\n\n### Conceptual Exploit Payload\nA malicious RSS feed could contain an entry with a payload like:\n```xml\n\u003centry\u003e\n  \u003ctitle\u003e\u0026lt;script\u0026gt;alert(document.cookie)\u0026lt;/script\u0026gt;\u003c/title\u003e\n  \u003cauthor\u003eMalicious Author \u0026lt;img src=x onerror=alert(1)\u0026gt;\u003c/author\u003e\n  \u003csummary\u003e\u0026lt;iframe src=\"javascript:alert(1)\"\u0026gt;\u0026lt;/iframe\u0026gt;\u003c/summary\u003e\n\u003c/entry\u003e\n```\nWhen `pandas_web.py` builds the website, it will parse this feed, generate the blog section, and write the unescaped script directly into `web/build/community/blog/index.html`. Any user visiting the generated blog page will execute the injected script.",
+    "Snippet": "    jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(templates_path))",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-79",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 452,
+    "EndLine": 453,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

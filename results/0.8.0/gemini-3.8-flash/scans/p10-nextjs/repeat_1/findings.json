@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "9a9082a3-b863-50cd-a1e2-3ea898bee60d",
+    "session_id": "ChBmMjY2NjllYjBlYWVkYjllEAgaATAqBG1haW4",
+    "title": "Server-Side Request Forgery (SSRF) via Server Actions Redirect and Host Header",
+    "file_path": "/home/jfplante_google_com/repos/p10-nextjs_rep1/packages/next/src/server/app-render/action-handler.ts",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "Data flow trace:\n1. Source: The untrusted `Host` or `X-Forwarded-Host` request header supplied by an attacker in an HTTP request, alongside a matching `Origin` header.\n2. Sanitization/Validation: In `packages/next/src/server/app-render/action-handler.ts`, `handleAction` attempts CSRF protection by checking `originDomain !== host.value`. An attacker directly invoking the Server Action can provide matching `Host` and `Origin` headers (e.g., `Host: attacker.com` and `Origin: http://attacker.com`, or targeting internal network services such as `169.254.169.254` or `internal-service:8080`), bypassing the check.\n3. Sink: When the server action executes a relative redirect (via `redirect()`), execution enters `createRedirectRenderResult`. When `process.env.__NEXT_PRIVATE_ORIGIN` is unset (such as in custom server architectures, Edge runtime, or serverless environments), Next.js constructs the origin from `${proto}://${originalHost.value}` and calls `fetch(fetchUrl, { method: 'GET', headers: forwardedHeaders, ... })`. Next.js makes an outbound HTTP request to the untrusted host containing forwarded request cookies and authentication headers, and if the response has content type `text/x-component`, returns the fetched response body directly to the client.\n\nConceptual Exploit Payload:\n```http\nPOST / HTTP/1.1\nHost: 169.254.169.254\nOrigin: http://169.254.169.254\nNext-Action: \u003caction-id-that-performs-redirect\u003e\nContent-Type: text/plain\n\n{}\n```\nUpon execution of the Server Action's redirect (e.g. `redirect('/latest/meta-data/')`), the server makes a `fetch('https://169.254.169.254/latest/meta-data/')` request, executing an SSRF attack against internal metadata endpoints or internal network services.",
+    "snippet": "    const proto =\n      staticGenerationStore.incrementalCache?.requestProtocol || 'https'\n\n    // For standalone or the serverful mode, use the internal origin directly\n    // other than the host headers from the request.\n    const origin =\n      process.env.__NEXT_PRIVATE_ORIGIN || `${proto}://${originalHost.value}`\n\n    const fetchUrl = new URL(\n      `${origin}${basePath}${parsedRedirectUrl.pathname}${parsedRedirectUrl.search}`\n    )\n\n    if (staticGenerationStore.revalidatedTags) {\n      forwardedHeaders.set(\n        NEXT_CACHE_REVALIDATED_TAGS_HEADER,\n        staticGenerationStore.revalidatedTags.join(',')\n      )\n      forwardedHeaders.set(\n        NEXT_CACHE_REVALIDATE_TAG_TOKEN_HEADER,\n        staticGenerationStore.incrementalCache?.prerenderManifest?.preview\n          ?.previewModeId || ''\n      )\n    }\n\n    // Ensures that when the path was revalidated we don't return a partial response on redirects\n    forwardedHeaders.delete('next-router-state-tree')\n\n    try {\n      const response = await fetch(fetchUrl, {\n        method: 'GET',\n        headers: forwardedHeaders,\n        next: {\n          // @ts-ignore\n          internal: 1,\n        },\n      })",
+    "vuln_type": "Server-Side Request Forgery (SSRF)",
+    "vuln_id": "CWE-918",
+    "status": "OPEN",
+    "start_line": 270,
+    "end_line": 306
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "53fc5553-3c35-5886-965e-fecf0d077c98",
+    "SessionID": "ChAwMTBmMjNmZjE4MTU4MmQ0EAgaATAqBG1haW4",
+    "Title": "SQL Injection in Badge Query Preview",
+    "FilePath": "app/controllers/admin/badges_controller.rb",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "An SQL injection vulnerability exists in Admin::BadgesController#preview. Under certain conditions where the administrator enabled badge SQL via `SiteSetting.enable_badge_sql` (which allows raw SQL query triggers for custom badges), a request to POST /admin/badges/preview allows raw user input in the `sql` parameter to be executed directly via `DB.query_single` and `DB.query` in `BadgeGranter.preview` without proper parameterization or sanitization of the SQL body.\n\nSpecifically, the `sql` parameter is embedded directly as a subquery inside of another query constructed dynamically in `BadgeGranter.preview`:\n```ruby\n    count_sql = \u003c\u003c~SQL\n      SELECT COUNT(*) count\n                 FROM (\n                        #{sql}\n                      ) q\n                WHERE :backfill = :backfill\n    SQL\n    grant_count = DB.query_single(count_sql, params).first.to_i\n```\nand also:\n```ruby\n      if opts[:target_posts]\n        \u003c\u003c~SQL\n        SELECT u.id, u.username, q.post_id, t.title, q.granted_at\n          FROM (\n                 #{sql}\n               ) q\n...\n```\nSince the `sql` string is directly interpolated into these queries, any valid SQL command can be passed to execute arbitrary database statements. An attacker with administrative access (or by leveraging an admin session) can exploit this to perform SQL injection and execute arbitrary SQL queries, leading to complete database compromise.\n\n**Conceptual Exploit Payload:**\n```http\nPOST /admin/badges/preview HTTP/1.1\nHost: localhost:3000\nContent-Type: application/json\nX-Requested-With: XMLHttpRequest\nCookie: \u003cvalid_admin_session_cookie\u003e\n\n{\n  \"sql\": \"SELECT 1 AS user_id, current_timestamp AS granted_at; UNION SELECT id AS user_id, current_timestamp AS granted_at FROM users --\",\n  \"explain\": \"false\",\n  \"trigger\": \"0\",\n  \"target_posts\": \"false\"\n}\n```",
+    "Snippet": "  def preview\n    return render json: \"preview not allowed\", status: 403 unless SiteSetting.enable_badge_sql\n\n    render json:\n             BadgeGranter.preview(\n               params[:sql],\n               target_posts: params[:target_posts] == \"true\",\n               explain: params[:explain] == \"true\",\n               trigger: params[:trigger].to_i,\n             )\n  end",
+    "VulnType": "SQL Injection",
+    "VulnID": "CWE-89",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 26,
+    "EndLine": 36,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

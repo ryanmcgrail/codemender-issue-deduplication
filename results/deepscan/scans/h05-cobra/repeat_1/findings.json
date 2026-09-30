@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "b04742c0-328c-55d9-bc0b-66c392712e4a",
+    "session_id": "ChA5N2JkNDc3M2NjMzU0OGRhEAgaATAqBG1haW4",
+    "title": "Heap Buffer Overflow via Incorrect Buffer Size Calculation in _upb_DefBuilder_MakeKey",
+    "file_path": "third_party/upb/upb/reflection/internal/def_builder.c",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `third_party/upb/upb/reflection/internal/def_builder.c`, `_upb_DefBuilder_MakeKey()` calculates the required buffer size for `ctx-\u003etmp_buf` using:\n`ctx-\u003etmp_buf_size = UPB_MAX(64, upb_Log2Ceiling(need));`\n\nHowever, `upb_Log2Ceiling(x)` computes the base-2 logarithm ceiling (i.e. $\\lceil \\log_2(x) \\rceil$, returning values typically between 0 and 64), whereas the function intended to calculate the next power-of-two allocation size is `upb_Log2CeilingSize(x)` (which computes `1 \u003c\u003c upb_Log2Ceiling(x)`).\n\nBecause `upb_Log2Ceiling(need)` returns $\\le 64$ for any 64-bit integer `need`, `UPB_MAX(64, upb_Log2Ceiling(need))` consistently evaluates to 64. Consequently, `ctx-\u003etmp_buf` is allocated as a 64-byte buffer via `upb_Arena_Malloc()`.\n\nWhen `need = key.size + sizeof(void*) \u003e 64` (e.g., when `key.size \u003e 56` on 64-bit architectures), the subsequent `memcpy` calls:\n```c\nmemcpy(ctx-\u003etmp_buf, \u0026parent, sizeof(void*));\nmemcpy(ctx-\u003etmp_buf + sizeof(void*), key.data, key.size);\n```\nwrite `need` bytes into the 64-byte buffer, causing an out-of-bounds heap buffer overflow.\n\nConceptual Exploit Payload:\nLoad or deserialize a protobuf FileDescriptorProto containing a FeatureSet or feature option where the serialized feature set key exceeds 56 bytes (e.g. 100 bytes of ASCII/binary data). When `_upb_DefBuilder_GetOrCreateFeatureSet()` invokes `_upb_DefBuilder_MakeKey()` with `key.size = 100`, `need` is 108. `ctx-\u003etmp_buf_size` is set to `UPB_MAX(64, 7) = 64`. Memory allocation allocates 64 bytes, and `memcpy` writes 108 bytes, overflowing `ctx-\u003etmp_buf` by 44 bytes on the heap.",
+    "snippet": "  if (ctx-\u003etmp_buf_size \u003c need) {\n    ctx-\u003etmp_buf_size = UPB_MAX(64, upb_Log2Ceiling(need));\n    ctx-\u003etmp_buf = upb_Arena_Malloc(ctx-\u003etmp_arena, ctx-\u003etmp_buf_size);\n    if (!ctx-\u003etmp_buf) _upb_DefBuilder_OomErr(ctx);\n  }\n\n  memcpy(ctx-\u003etmp_buf, \u0026parent, sizeof(void*));\n  memcpy(ctx-\u003etmp_buf + sizeof(void*), key.data, key.size);",
+    "vuln_type": "CWE-122: Heap-based Buffer Overflow",
+    "vuln_id": "CWE-122",
+    "status": "OPEN",
+    "start_line": 352,
+    "end_line": 359
+  },
+  {
+    "finding_id": "d49933c0-00d6-5359-9200-dcc638cf2cb1",
+    "session_id": "ChA2MmNhOTI3ZGM4Mzg0OTliEAgaATAqBG1haW4",
+    "title": "Integer Underflow Leading to Heap Buffer Overflow in tsi_fake_frame_decode",
+    "file_path": "/home/jfplante_google_com/repos/p35-grpc_rep1/src/core/tsi/fake_transport_security.cc",
+    "severity": "HIGH",
+    "confidence": 90,
+    "analysis": "Data Flow Path:\n- Source: Network peer input received during fake transport security handshaking / frame processing via `tsi_fake_frame_decode` (invoked through `tsi_fake_handshaker` or `tsi_fake_frame_protector`).\n- Sanitization/Validation: In `tsi_fake_frame_decode`, the frame header is read into `frame-\u003edata` and parsed with `frame-\u003esize = load32_little_endian(frame-\u003edata)`. The code completely fails to validate that `frame-\u003esize \u003e= TSI_FAKE_FRAME_HEADER_SIZE` (4). It then calls `tsi_fake_frame_ensure_size(frame)`, which only reallocates if `frame-\u003esize \u003e frame-\u003eallocated_size` (where initial `allocated_size` is 64). If `frame-\u003esize` is less than 4, `allocated_size` remains 64.\n- Sink: At line 216, `to_read_size = frame-\u003esize - frame-\u003eoffset;` executes with `frame-\u003eoffset == 4`. Because both are unsigned `size_t`, setting `frame-\u003esize` to 0 causes an unsigned integer underflow yielding `SIZE_MAX - 3` (e.g. 0xFFFFFFFFFFFFFFFC). Consequently, `to_read_size \u003e available_size` evaluates to true for any packet payload size `available_size`. At line 218, `memcpy(frame-\u003edata + frame-\u003eoffset, bytes_cursor, available_size);` is invoked. If the attacker supplies an incoming packet with `available_size \u003e 60` bytes (e.g. 256 bytes), `memcpy` copies past the 64-byte allocated heap buffer `frame-\u003edata`, resulting in heap memory corruption.\n\nConceptual Exploit Payload:\nSend a frame beginning with `\\x00\\x00\\x00\\x00` (declaring frame size = 0) followed by 250 bytes of arbitrary shellcode / overflow payload: `\\x00\\x00\\x00\\x00` + `\\x90` * 250.\nUpon parsing the header, `frame-\u003esize` is set to 0. `to_read_size` evaluates to `0 - 4 = 18446744073709551612 \u003e 250`. `memcpy` copies all 250 bytes into `frame-\u003edata + 4`, which only has 60 remaining bytes allocated, corrupting heap metadata and adjacent allocations.",
+    "snippet": "  to_read_size = frame-\u003esize - frame-\u003eoffset;\n  if (to_read_size \u003e available_size) {\n    memcpy(frame-\u003edata + frame-\u003eoffset, bytes_cursor, available_size);\n    frame-\u003eoffset += available_size;\n    bytes_cursor += available_size;\n    *incoming_bytes_size = static_cast\u003csize_t\u003e(bytes_cursor - incoming_bytes);\n    return TSI_INCOMPLETE_DATA;\n  }",
+    "vuln_type": "CWE-122: Heap-based Buffer Overflow",
+    "vuln_id": "CWE-122",
+    "status": "OPEN",
+    "start_line": 216,
+    "end_line": 222
+  },
+  {
+    "finding_id": "de393f90-17a2-5947-8397-3a6d2d7485e8",
+    "session_id": "ChA4ODUwYTJkOTk1NTA3ZWE4EAgaATAqBG1haW4",
+    "title": "Stack Buffer Overflow in c-ares Windows Event Driver via Inverted Bounds Check",
+    "file_path": "/home/jfplante_google_com/repos/p35-grpc_rep1/src/core/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `src/core/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc`, `GrpcPolledFdWindows::RecvFrom` implements the custom `recvfrom` callback hook provided to c-ares via `ares_set_socket_functions`.\n\n### Data Flow \u0026 Vulnerability Analysis:\n1. **Source**: c-ares calls the overridden `recvfrom` callback (`RecvFrom`) when processing incoming DNS responses over UDP. c-ares passes a pointer to a `sockaddr` buffer (`from`) and a pointer to its length (`from_len`). In c-ares, `from` is typically a stack-allocated `struct sockaddr_storage` of size 128 bytes, with `*from_len` initialized to `sizeof(struct sockaddr_storage)`.\n2. **Inverted Bounds Check**: At line 312:\n   ```cpp\n   if (from != nullptr) {\n     CHECK(*from_len \u003c= recv_from_source_addr_len_);\n     memcpy(from, \u0026recv_from_source_addr_, recv_from_source_addr_len_);\n     *from_len = recv_from_source_addr_len_;\n   }\n   ```\n   The safety condition is inverted. To ensure the copy does not overflow `from`, the destination capacity `*from_len` must be greater than or equal to the bytes copied (`*from_len \u003e= recv_from_source_addr_len_`). Instead, the check asserts `*from_len \u003c= recv_from_source_addr_len_`.\n3. **Sink (Buffer Overflow)**:\n   In `ContinueRegisterForOnReadableLocked()`, `recv_from_source_addr_len_` is initialized to `sizeof(recv_from_source_addr_)` which is 200 bytes (defined at line 671 as `char recv_from_source_addr_[200]`).\n   When `*from_len` is 128 bytes (the size of `sockaddr_storage`), the condition `128 \u003c= 200` evaluates to true.\n   `memcpy(from, \u0026recv_from_source_addr_, recv_from_source_addr_len_)` copies 200 bytes into the 128-byte buffer `from`, overflowing the buffer by 72 bytes. Because `from` is allocated on the caller's stack frame in c-ares, this leads to a stack-based buffer overflow.\n   Conversely, if the destination buffer was genuinely larger than `recv_from_source_addr_len_`, `CHECK(*from_len \u003c= recv_from_source_addr_len_)` fails and causes an assertion failure/process crash.\n\n### Conceptual Exploit Scenario:\n1. A gRPC client or server configured to resolve hostnames via c-ares on Windows triggers DNS resolution for an address.\n2. A DNS server or network attacker returns a DNS response packet to the gRPC client's UDP port.\n3. Overlapped I/O completes and c-ares' `ares_process` loop calls `kCustomSockFuncs.asrecvfrom`.\n4. c-ares invokes `RecvFrom` with `from` pointing to stack variable `struct sockaddr_storage from` (size 128) and `*from_len = 128`.\n5. `CHECK(*from_len \u003c= recv_from_source_addr_len_)` evaluates `128 \u003c= 200` (true) and `memcpy` copies 200 bytes into the 128-byte stack buffer, overflowing adjacent stack memory with contents from `recv_from_source_addr_`.",
+    "snippet": "    if (from != nullptr) {\n      CHECK(*from_len \u003c= recv_from_source_addr_len_);\n      memcpy(from, \u0026recv_from_source_addr_, recv_from_source_addr_len_);\n      *from_len = recv_from_source_addr_len_;\n    }",
+    "vuln_type": "CWE-120: Buffer Copy without Checking Size of Input ('Classic Buffer Overflow')",
+    "vuln_id": "CWE-120",
+    "status": "OPEN",
+    "start_line": 311,
+    "end_line": 315
+  },
+  {
+    "finding_id": "9725c72e-8909-50b1-bcd1-fc13c73f31fc",
+    "session_id": "ChBkYTY0NWE0NDY5YTgxYjg0EAgaATAqBG1haW4",
+    "title": "Improper Null Termination of load_balance_token leading to Heap Out-of-Bounds Read",
+    "file_path": "/home/jfplante_google_com/repos/p35-grpc_rep1/src/core/load_balancing/grpclb/load_balancer_api.cc",
+    "severity": "HIGH",
+    "confidence": 90,
+    "analysis": "In `ParseServerList` (`src/core/load_balancing/grpclb/load_balancer_api.cc`), the grpclb response parser extracts `load_balance_token` from incoming protobuf server entries:\n\n```cpp\nupb_StringView token = grpc_lb_v1_Server_load_balance_token(servers[i]);\nif (token.size == 0) {\n  ;  // Nothing to do because cur-\u003eload_balance_token is an empty string.\n} else if (token.size \u003c= GRPC_GRPCLB_SERVER_LOAD_BALANCE_TOKEN_MAX_SIZE) {\n  memcpy(cur.load_balance_token, token.data, token.size);\n}\n```\n\n`cur.load_balance_token` is declared in `load_balancer_api.h` as:\n`char load_balance_token[GRPC_GRPCLB_SERVER_LOAD_BALANCE_TOKEN_MAX_SIZE];` where `GRPC_GRPCLB_SERVER_LOAD_BALANCE_TOKEN_MAX_SIZE` is 50.\n\nBecause the check uses `\u003c=` (`token.size \u003c= 50`), a token of exactly 50 bytes is copied directly into `cur.load_balance_token` using `memcpy`. Protobuf string fields are length-delimited and not null-terminated. When `token.size` is 50, all 50 bytes of `cur.load_balance_token` are filled with non-null bytes, leaving no room for a null terminator.\n\nDownstream code treats `cur.load_balance_token` as a null-terminated C string:\n1. `GrpcLb::Serverlist::ShouldDrop()` returns `server.load_balance_token` as `const char*` when `server.drop` is true.\n2. In `GrpcLb::Picker::Pick()`, `client_stats_-\u003eAddCallDropped(drop_token)` is called, which executes `strcmp` and `drop_token_counts_-\u003eemplace_back(UniquePtr\u003cchar\u003e(gpr_strdup(token)), 1)`. Both `strcmp` and `gpr_strdup` perform unbounded reads searching for `\\0`, resulting in an out-of-bounds heap read.\n3. Leaked heap memory captured by `gpr_strdup` is subsequently serialized into client load report messages sent back to the balancer (`GrpcLbLoadReportRequestCreate`), causing memory disclosure.\n4. `GrpcLb::Serverlist::AsText()` formats `server.load_balance_token` using `%s` in `absl::StrFormat`, also resulting in an out-of-bounds read.\n\nConceptual Exploit Payload:\nA malicious or compromised grpclb balancer sends a `LoadBalanceResponse` containing a `ServerList` entry with `drop = true` and a 50-byte non-null ASCII string for `load_balance_token` (e.g. `Server { ip_address: \"127.0.0.1\", port: 8080, load_balance_token: \"A\" * 50, drop: true }`). When the client receives this response and triggers a drop on `Pick()`, `AddCallDropped` invokes `gpr_strdup` on the unterminated 50-byte buffer, reading adjacent heap memory until a zero byte is encountered, leading to heap OOB read and memory disclosure in load reporting.",
+    "snippet": "      } else if (token.size \u003c= GRPC_GRPCLB_SERVER_LOAD_BALANCE_TOKEN_MAX_SIZE) {\n        memcpy(cur.load_balance_token, token.data, token.size);",
+    "vuln_type": "Improper Null Termination",
+    "vuln_id": "CWE-170",
+    "status": "OPEN",
+    "start_line": 145,
+    "end_line": 146
+  }
+]

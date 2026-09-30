@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "3a351f03-d63d-5418-80b7-746f0817607a",
+    "SessionID": "ChA5MjdmYmY5ODU2ZDc3NDAxEAgaATAqBG1haW4",
+    "Title": "Case-Sensitive and Unnormalized Host Matching in UrlSanitizer",
+    "FilePath": "src/Symfony/Component/HtmlSanitizer/TextSanitizer/UrlSanitizer.php",
+    "Severity": "MEDIUM",
+    "Confidence": 85,
+    "Analysis": "The `UrlSanitizer` class in `HtmlSanitizer` handles URL host validation to prevent SSRF and Open Redirect vulnerabilities by checking if the URL host matches a developer-specified list of allowed hosts (`$allowedHosts`).\n\nHowever, the comparison inside `isAllowedHost` is case-sensitive and does not normalize trailing dots:\n1. **Case-Sensitivity**: If a developer configures `$allowedHosts` with lower-case domains like `trusted.com`, an input containing `TRUSTED.COM` or `Trusted.Com` is rejected (which might break functionality), but conversely, if the developer configures `TRUSTED.COM` (e.g., due to copy-paste), any input like `trusted.com` will be rejected. More critically, if case normalization is performed incorrectly elsewhere, it could lead to validation mismatches.\n2. **Trailing Dot / Relative Scheme Bypasses**: Since the parser does not strip trailing dots (e.g., `trusted.com.`), the exploded parts will mismatch the configured allowed host because `explode('.', 'trusted.com.')` yields `['trusted', 'com', '']` whereas the configured host yields `['trusted', 'com']`. Depending on the target environment's DNS resolution and routing, this could be abused if there are discrepancies in how different HTTP libraries or browsers handle trailing dots vs the sanitizer validation logic.\n\n### Conceptual Payload\nIf the allowed host configured is `TRUSTED.COM`:\nAn input URL such as `https://trusted.com/` could bypass or fail validation inconsistently, or conversely `https://TRUSTED.COM./` could be used to evade certain checks if processed by a downstream client.",
+    "Snippet": "    private static function isAllowedHost(?string $host, array $allowedHosts): bool\n    {\n        if (null === $host) {\n            return \\in_array(null, $allowedHosts, true);\n        }\n\n        $parts = array_reverse(explode('.', $host));\n\n        foreach ($allowedHosts as $allowedHost) {\n            if (self::matchAllowedHostParts($parts, array_reverse(explode('.', $allowedHost)))) {\n                return true;\n            }\n        }\n\n        return false;\n    }",
+    "VulnType": "CWE-20",
+    "VulnID": "CWE-20",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 108,
+    "EndLine": 123,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

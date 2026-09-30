@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "0afaba1e-b3c4-5284-981f-2b53114d905f",
+    "SessionID": "ChA0MzdmMmExNjA5MGRkNDMwEAgaATAqBG1haW4",
+    "Title": "Server-Side Request Forgery (SSRF) in JWT Verifier via Arbitrary Issuer URL Resolution",
+    "FilePath": "src/core/lib/security/credentials/jwt/jwt_verifier.cc",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `grpc_jwt_issuer_email_domain` function in `src/core/lib/security/credentials/jwt/jwt_verifier.cc` extracts the email domain from the JWT `iss` claim. If `iss` does not contain an `@` character, the verifier treats it as a URL-based issuer and extracts the host from the `iss` value. It then creates an HTTP request using this host to fetch the OpenID configuration at `https://\u003chost\u003e/.well-known/openid-configuration`. Because there is no validation or allowlist checking on the extracted `host` before it is passed to `grpc_core::HttpRequest::Get`, an attacker can provide a JWT with a malicious `iss` claim (e.g. `127.0.0.1` or `attacker.com`), forcing the gRPC server to perform an outbound HTTPS request (Server-Side Request Forgery).\n\n**Conceptual Exploit Payload:**\nAn attacker crafts a JWT with the following payload in the claims segment:\n```json\n{\n  \"iss\": \"attacker.com\",\n  \"sub\": \"some-subject\",\n  \"aud\": \"expected-audience\",\n  \"exp\": 1900000000\n}\n```\nWhen the gRPC server receives this token and verifies it using `grpc_jwt_verifier_verify`, it parses the claims and resolves the issuer. Since there is no `@` in `attacker.com`, the server treats it as a URL issuer and makes an HTTP GET request to `https://attacker.com/.well-known/openid-configuration`. If `attacker.com` returns a valid OpenID configuration containing a malicious `jwks_uri` (e.g., pointing to another target), the server will make a second HTTP GET request to retrieve the signing keys.",
+    "Snippet": "    host = gpr_strdup(strstr(iss, \"https://\") == iss ? iss + 8 : iss);\n    path_prefix = strchr(host, '/');\n    if (path_prefix == nullptr) {\n      path = gpr_strdup(GRPC_OPENID_CONFIG_URL_SUFFIX);\n    } else {\n      *(path_prefix++) = 0;\n      gpr_asprintf(\u0026path, \"/%s%s\", path_prefix, GRPC_OPENID_CONFIG_URL_SUFFIX);\n    }\n    http_cb = GRPC_CLOSURE_CREATE(on_openid_config_retrieved, ctx,\n                                  grpc_schedule_on_exec_ctx);\n    rsp_idx = HTTP_RESPONSE_OPENID;\n  }\n\n  // TODO(ctiller): Carry the resource_quota in ctx and share it with the host\n  // channel. This would allow us to cancel an authentication query when under\n  // extreme memory pressure.\n  uri = grpc_core::URI::Create(\"https\", host, path, {} /* query params */,\n                               \"\" /* fragment */);\n  if (!uri.ok()) {\n    goto error;\n  }\n  ctx-\u003ehttp_request = grpc_core::HttpRequest::Get(\n      std::move(*uri), nullptr /* channel args */, \u0026ctx-\u003epollent, \u0026req,\n      grpc_core::Timestamp::Now() + grpc_jwt_verifier_max_delay, http_cb,\n      \u0026ctx-\u003eresponses[rsp_idx], grpc_core::CreateHttpRequestSSLCredentials());\n  ctx-\u003ehttp_request-\u003eStart();",
+    "VulnType": "CWE-918",
+    "VulnID": "CWE-918",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 880,
+    "EndLine": 905,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

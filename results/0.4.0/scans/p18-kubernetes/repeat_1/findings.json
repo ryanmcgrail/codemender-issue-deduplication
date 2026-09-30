@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "c876bb9f-0a9d-58c9-b412-9c0d50c2785f",
+    "SessionID": "ChAyZTg0ODM3NTY4NjY1OTIwEAgaATAqBG1haW4",
+    "Title": "Command Injection in Kubelet Log Query on Windows via Pattern Parameter",
+    "FilePath": "pkg/kubelet/kubelet_server_journal_windows.go",
+    "Severity": "CRITICAL",
+    "Confidence": 100,
+    "Analysis": "**Source**: The `pattern` query parameter of the `/logs/` HTTP endpoint, which maps directly to the `n.Pattern` field of the `nodeLogQuery` struct.\n**Sanitization/Validation**: The input is only validated using `syntax.Parse(n.Pattern, syntax.Perl)` to ensure it is a valid Perl regular expression. However, standard regular expression syntax fully allows single quotes (`'`), semicolons (`;`), and comment markers (`#`), which are dangerous in PowerShell command interpolation. No escaping or sanitization of single quotes is performed.\n**Sink**: The command string is passed to PowerShell via `exec.CommandContext` in `pkg/kubelet/kubelet_server_journal.go` after being formatted as part of a `-Command` argument in `getLoggingCmd`.\n**Conceptual Exploit Payload**:\nA request to the logs endpoint:\n`GET /logs/?query=kubelet\u0026pattern=x%27%3b+whoami%3b+%23`\nWhich decodes to:\n`x'; whoami; #`\nWhen interpolated, the PowerShell command executed becomes:\n`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='kubelet'} | Sort-Object TimeCreated | Where-Object -Property Message -Match 'x'; whoami; #' | Format-Table -AutoSize -Wrap`\nThe single quote terminates the regex pattern string for the `-Match` operator, the semicolon terminates the `Where-Object` command, `whoami` is executed as a separate PowerShell statement, and the trailing characters are commented out using `#`. This leads to arbitrary command execution on the host with Kubelet's privileges.",
+    "Snippet": "\tif len(n.Pattern) \u003e 0 {\n\t\tpsCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n\t}",
+    "VulnType": "Command Injection",
+    "VulnID": "CWE-78",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 59,
+    "EndLine": 61,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

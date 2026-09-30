@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "6484b6f5-43d0-53e0-b225-226f22088be3",
+    "session_id": "ChBmYzg5NTM3MmE5ZWE4ZTlhEAgaATAqBG1haW4",
+    "title": "Stack-based Buffer Overflow in LwM2M Write Attributes Handler",
+    "file_path": "/home/jfplante_google_com/repos/p34-zephyr_rep1/subsys/net/lib/lwm2m/lwm2m_observation.c",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "In the LwM2M engine, when processing a write attribute request (CoAP WRITE_ATTR), the function `lwm2m_write_attr_handler` is called. It extracts CoAP query options (attributes like pmin, pmax, gt, lt, st) and copies their values into a local stack-based buffer `opt_buf` of size `COAP_OPTION_BUF_LEN` (which can be as small as 13 bytes by default if `CONFIG_COAP_EXTENDED_OPTIONS_LEN` is not set).\n\nThe code calculates the length of the attribute value as `vlen = options[i].len - plen - 1`, where `options[i].len` is the length of the incoming query option, and `plen` is the length of the attribute key prefix (e.g., 4 for 'pmin' or 'pmax').\n\nThe function then calls:\n```c\nvlen = options[i].len - plen - 1;\nmemcpy(opt_buf, options[i].value + plen + 1, vlen);\nopt_buf[vlen] = '\\0';\n```\nSince there is no check to ensure `vlen \u003c COAP_OPTION_BUF_LEN`, a remote attacker can send a CoAP Write Attribute request with a maliciously crafted query parameter longer than 12 bytes (for example: `?pmin=123456789012345678901234567890`). This triggers a stack-based buffer overflow, allowing the attacker to overwrite the stack frame, including the function's return address, leading to arbitrary remote code execution on the target RTOS.\n\n### Conceptual Exploit Payload\nA CoAP PUT request containing the following URI query string:\n`?pmin=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`\nWhen this request is parsed:\n1. `options[i]` will represent the URI query parameter.\n2. `options[i].len` will be 85.\n3. `plen` will be 4 (matching \"pmin\").\n4. `vlen` is computed as `85 - 4 - 1 = 80`.\n5. `memcpy` will copy 80 bytes of 'A's into the 13-byte stack buffer `opt_buf`, overwriting the stack and function return address with `0x41414141`.",
+    "snippet": "\\t\\tvlen = options[i].len - plen - 1;\\n\\t\\tmemcpy(opt_buf, options[i].value + plen + 1, vlen);\\n\\t\\topt_buf[vlen] = '\\\\0';",
+    "vuln_type": "CWE-121",
+    "vuln_id": "CWE-121",
+    "status": "OPEN",
+    "start_line": 1230,
+    "end_line": 1232
+  },
+  {
+    "finding_id": "249cabad-f883-54b3-b29b-ed102f8b27a4",
+    "session_id": "ChBmYzg5NTM3MmE5ZWE4ZTlhEAgaATAqBG1haW4",
+    "title": "Infinite Loop in mDNS/DNS Decompression (Denial of Service)",
+    "file_path": "/home/jfplante_google_com/repos/p34-zephyr_rep1/subsys/net/lib/dns/dns_pack.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In DNS packet parsing, the mDNS/DNS response handler reads and decodes compressed domain names (FQDNs). The function `dns_copy_qname` processes these names. It implements a standard DNS label decompression loop:\n```c\n\twhile (1) {\n\t\tif (pos \u003e= msg_size) {\n\t\t\trc = -ENOMEM;\n\t\t\tbreak;\n\t\t}\n\n\t\tlb_size = msg[pos];\n\n\t\t/* pointer */\n\t\tif (lb_size \u003e DNS_LABEL_MAX_SIZE) {\n\t\t\tuint8_t mask = DNS_LABEL_MAX_SIZE;\n\n\t\t\tif (pos + 1 \u003e= msg_size) {\n\t\t\t\trc = -ENOMEM;\n\t\t\t\tbreak;\n\t\t\t}\n\n\t\t\t/* See: RFC 1035, 4.1.4. Message compression */\n\t\t\tpos = ((msg[pos] \u0026 mask) \u003c\u003c 8) + msg[pos + 1];\n\n\t\t\tcontinue;\n\t\t}\n...\n```\nHowever, there is no validation to prevent a pointer from jumping backwards to an offset that has already been visited, or pointing directly to itself. An attacker can craft a DNS response containing a compressed label pointer that points to itself (e.g. offset `pos` pointing to `pos`), causing the parser to loop indefinitely in the `while (1)` loop. On an RTOS like Zephyr, this infinite loop runs inside the context of the network thread or system thread, leading to thread hang, 100% CPU core exhaustion, and a complete Denial of Service (DoS) of the system.\n\n### Conceptual Exploit Payload\nA crafted DNS query answer containing a compressed name pointer pointing back to itself:\n1. In the mDNS/DNS packet, at offset `0x10`, we place a compressed pointer: `0xc0 0x10` (representing a pointer to offset `0x10`).\n2. When `dns_copy_qname` parses the domain name starting at offset `0x10`, `pos` starts at `0x10`.\n3. `lb_size = msg[0x10] = 0xc0`.\n4. Since `0xc0 \u003e 63` (`DNS_LABEL_MAX_SIZE`), it processes the pointer.\n5. `pos` is recomputed as `((0xc0 \u0026 0x3f) \u003c\u003c 8) + msg[0x11] = (0x00 \u003c\u003c 8) + 0x10 = 0x10`.\n6. The loop hits `continue;` and repeats with `pos = 0x10` indefinitely, locking up the CPU.",
+    "snippet": "\\twhile (1) {\\n\\t\\tif (pos \u003e= msg_size) {\\n\\t\\t\\trc = -ENOMEM;\\n\\t\\t\\tbreak;\\n\\t\\t}\\n\\n\\t\\tlb_size = msg[pos];\\n\\n\\t\\t/* pointer */\\n\\t\\tif (lb_size \u003e DNS_LABEL_MAX_SIZE) {\\n\\t\\t\\tuint8_t mask = DNS_LABEL_MAX_SIZE;\\n\\n\\t\\t\\tif (pos + 1 \u003e= msg_size) {\\n\\t\\t\\t\\trc = -ENOMEM;\\n\\t\\t\\t\\tbreak;\\n\\t\\t\\t}\\n\\n\\t\\t\\t/* See: RFC 1035, 4.1.4. Message compression */\\n\\t\\t\\tpos = ((msg[pos] \u0026 mask) \u003c\u003c 8) + msg[pos + 1];\\n\\n\\t\\t\\tcontinue;\\n\\t\\t}",
+    "vuln_type": "CWE-835",
+    "vuln_id": "CWE-835",
+    "status": "OPEN",
+    "start_line": 371,
+    "end_line": 416
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "2608802b-f4a4-51b7-b35b-ff3c3efe000a",
+    "session_id": "ChBjMDA3MDc5NzM3YTEwOGRmEAgaATAqBG1haW4",
+    "title": "DOM Cross-Site Scripting (XSS) in Heatmap Tooltip via Unescaped Bucket Label",
+    "file_path": "/home/jfplante_google_com/repos/p15-prometheus_rep1/web/ui/react-app/src/vendor/flot/jquery.flot.heatmap.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "A DOM-based Cross-Site Scripting (XSS) vulnerability exists in the Prometheus Web UI heatmap visualization component (`jquery.flot.heatmap.js`). \n\n**Data Flow:**\n1. **Source**: Untrusted user input can enter either via URL parameters on the Prometheus Graph page (such as `g0.expr` containing a PromQL expression that sets or replaces the `le` label, e.g. via `label_replace()`, combined with `g0.display_mode=heatmap`) or via metric labels ingested from monitored scrape targets or remote write requests.\n2. **Validation/Sanitization**: While other parts of the graph UI (such as `GraphHelpers.ts`) sanitize label values using `escapeHTML()`, `jquery.flot.heatmap.js` extracts `s?.labels?.le` and interpolates it directly into template literals (`labelHtml = '\u003cdiv\u003eBucket: ' + (label || 'value') + '\u003c/div\u003e'`) with zero escaping or sanitization.\n3. **Sink**: `tooltip.innerHTML = '\u003cdiv\u003e' + timeHtml + '\u003cdiv\u003e' + labelHtml + valueHtml + '\u003c/div\u003e\u003c/div\u003e'` followed by `document.body.appendChild(tooltip)` on mouse hover over a heatmap cell.\n\n**Conceptual Exploit Payload:**\nAn attacker crafts a link to the Prometheus Web UI with a query that generates a series with an XSS payload in the `le` label and automatically enables heatmap view:\n```\nhttp://\u003cprometheus-host\u003e:9090/graph?g0.expr=label_replace(vector(1)%2C+%22le%22%2C+%22%3Cimg+src%3Dx+onerror%3Dalert(document.domain)%3E%22%2C+%22%22%2C+%22%22)\u0026g0.tab=0\u0026g0.display_mode=heatmap\n```\nWhen a user visits the link and hovers their cursor over the rendered heatmap chart, `mouseMoveHandler` triggers `showTooltip`, which assigns the unescaped `le` label containing the `\u003cimg\u003e` payload to `tooltip.innerHTML` and appends it to `document.body`, executing arbitrary JavaScript in the victim's browser context. Alternatively, an attacker controlling a monitored target can expose a histogram metric with a malicious `le` label value to achieve persistent stored XSS when users view heatmaps of that metric.",
+    "snippet": "  function showTooltip({x, y, cssClass, value, dateTime, label}) {\n    const tooltip = document.createElement('div');\n    tooltip.id = TOOLTIP_ID\n    tooltip.className = cssClass;\n\n    const timeHtml = `\u003cdiv class=\"date\"\u003e${dateTime.join('\u003cbr\u003e')}\u003c/div\u003e`\n    const labelHtml = `\u003cdiv\u003eBucket: ${label || 'value'}\u003c/div\u003e`\n    const valueHtml = `\u003cdiv\u003eValue: \u003cstrong\u003e${value}\u003c/strong\u003e\u003c/div\u003e`\n    tooltip.innerHTML = `\u003cdiv\u003e${timeHtml}\u003cdiv\u003e${labelHtml}${valueHtml}\u003c/div\u003e\u003c/div\u003e`;\n\n    tooltip.style.position = 'absolute';\n    tooltip.style.top = y + 5 + 'px';\n    tooltip.style.left = x + 5 + 'px';\n    tooltip.style.display = 'none';\n    document.body.appendChild(tooltip);",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 79,
+    "end_line": 93
+  }
+]

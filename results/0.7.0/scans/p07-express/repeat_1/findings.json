@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "02b4ead1-ce82-5112-93a5-c6c26c4e31d8",
+    "session_id": "ChA4ZmY3MTVkMTJhNTFjZWYwEAgaATAqBG1haW4",
+    "title": "Open Redirect vulnerability in res.redirect() (CVE-2024-43796)",
+    "file_path": "/home/jfplante_google_com/repos/p07-express_rep1/lib/response.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Express versions \u003c= 4.19.2 (and \u003c 4.21.1 / \u003c 4.20.0) are vulnerable to an Open Redirect vulnerability in `res.redirect()` / `res.location()` due to inconsistent URL parsing between server-side validators (like legacy `url.parse`) and modern WHATWG-compliant browsers, known as CVE-2024-43796.\n\n### Data Flow Trace\n- **Source**: Untrusted user input passed to `res.redirect(req.query.url)`.\n- **Sanitization/Validation**: The developer attempts to validate that the host matches an allowed domain (e.g. `google.com`) using `url.parse(input).host`. However, legacy `url.parse` behaves differently from browser engines when handling backslashes `\\`.\n- **Sink**: `res.location()` processes the URL on lines 917-922, incorrectly computing the host boundary and failing to encode backslashes before the `@` symbol, and then sets the `Location` header via `this.set('Location', loc)` (line 924).\n\n### Conceptual Exploit Payload\nIf the application performs the following validation:\n```javascript\napp.get('/redirect', (req, res) =\u003e {\n  let target = req.query.url;\n  let parsed = url.parse(target, false, true);\n  if (parsed.host === 'google.com') {\n    res.redirect(target);\n  } else {\n    res.status(400).send('Forbidden');\n  }\n});\n```\nAn attacker can trigger an open redirect to `evil.com` by requesting:\n```http\nGET /redirect?url=//google.com\\\\@evil.com/ HTTP/1.1\nHost: localhost:3000\n```\n1. `url.parse('//google.com\\\\@evil.com/', false, true).host` parses as `'google.com'`. The validation passes.\n2. In `res.location`, `schemaAndHostRegExp.exec('//google.com\\\\@evil.com/')` matches `//google.com`, which calculates `pos = 13`.\n3. `loc.slice(0, 13)` extracts `//google.com\\`. The backslash is not encoded.\n4. `encodeUrl` is run on the remainder (`\\@evil.com/`). Since the backslash is kept, the final header is:\n   `Location: //google.com\\\\@evil.com/`\n5. Modern browsers normalize backslashes and parse the authority, interpreting `google.com\\` as userinfo and `evil.com` as the target domain, redirecting the user to `evil.com`.",
+    "snippet": "res.location = function location(url) {\n  var loc;\n\n  // \"back\" is an alias for the referrer\n  if (url === 'back') {\n    loc = this.req.get('Referrer') || '/';\n  } else {\n    loc = String(url);\n  }\n\n  var m = schemaAndHostRegExp.exec(loc);\n  var pos = m ? m[0].length + 1 : 0;\n\n  // Only encode after host to avoid invalid encoding which can introduce\n  // vulnerabilities (e.g. `\\\\` to `%5C`).\n  loc = loc.slice(0, pos) + encodeUrl(loc.slice(pos));\n\n  return this.set('Location', loc);\n};",
+    "vuln_type": "CWE-601",
+    "vuln_id": "CVE-2024-43796",
+    "status": "OPEN",
+    "start_line": 907,
+    "end_line": 925
+  },
+  {
+    "finding_id": "ca74adf1-82a3-56ef-b145-0b407aa8b480",
+    "session_id": "ChA4ZmY3MTVkMTJhNTFjZWYwEAgaATAqBG1haW4",
+    "title": "Regular Expression Denial of Service (ReDoS) in path-to-regexp",
+    "file_path": "/home/jfplante_google_com/repos/p07-express_rep1/package.json",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The `express` package depends on `path-to-regexp` version `0.1.7` (as defined in `package.json` on line 50), which is vulnerable to Regular Expression Denial of Service (ReDoS) via CVE-2024-45296.\n\n### Data Flow Trace\n- **Source**: Untrusted incoming HTTP request paths (e.g., `req.path`).\n- **Sanitization/Validation**: None. The framework directly processes the path and attempts to match it against all registered routing layers.\n- **Sink**: In `lib/router/layer.js`, line 129, the compiled regular expression is executed using `match = this.regexp.exec(path)`.\n\n### Conceptual Exploit Payload\nIf the application has a route defined with optional wildcards or repetitions, such as:\n```javascript\napp.get('/:foo*', (req, res) =\u003e { res.send('OK'); });\n```\nAn attacker can send an HTTP request with a crafted path containing a long, repeating sequence of characters, such as:\n```http\nGET /a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a HTTP/1.1\nHost: localhost:3000\n```\nThis triggers exponential backtracking in the regex engine of `path-to-regexp`, locking up the single-threaded Node.js event loop and causing a complete Denial of Service.",
+    "snippet": "    \"path-to-regexp\": \"0.1.7\",",
+    "vuln_type": "CWE-1333",
+    "vuln_id": "CVE-2024-45296",
+    "status": "OPEN",
+    "start_line": 50,
+    "end_line": 50
+  }
+]

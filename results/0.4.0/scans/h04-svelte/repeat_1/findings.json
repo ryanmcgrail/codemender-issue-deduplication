@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "01a13122-13b2-54ff-8379-7038029e4610",
+    "SessionID": "ChA1OTFmZWFkZThjODU5ZWEyEAgaATAqBG1haW4",
+    "Title": "Cross-site Scripting (XSS) in Svelte SSR Hydratable Serialization via \u003c/script\u003e Injection",
+    "FilePath": "packages/svelte/src/internal/server/renderer.js",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `Renderer.#hydratable_block` method handles serialization of hydratables during SSR by creating a `\u003cscript\u003e` block containing JSON/JS data serialized with `devalue.uneval`. However, the key `k` is serialized using `devalue.uneval(k)`, and the value `v.serialized` is directly interpolated as a raw, unescaped string into the inline `\u003cscript\u003e` template on line 903: `[${devalue.uneval(k)},${v.serialized}]`. \n\nWhen the value is a promise, `v.serialized` gets updated on promise resolution on line 72 of `packages/svelte/src/internal/server/hydratable.js`: `() =\u003e 'r(' + uneval(v) + ')'`. If `v` (the resolved promise value) is a string containing `\u003c/script\u003e`, it is serialized by `uneval` as a JS string literal `\\\"\u003c/script\u003e\\\"` (or containing the exact characters `\u003c/script\u003e`). Because the string is interpolated *directly* as JavaScript source code inside the inline `\u003cscript\u003e` tag, the browser's HTML parser parses `\u003c/script\u003e` as the closing tag for the script block itself, allowing an attacker to inject arbitrary HTML/JS following it (Cross-Site Scripting).\n\n### Conceptual Exploit Payload\nA Svelte page contains a hydratable promise, e.g.:\n```js\nimport { hydratable } from 'svelte';\nconst data = hydratable('my_key', () =\u003e Promise.resolve('\u003c/script\u003e\u003cscript\u003ealert(1)\u003c/script\u003e'));\n```\n\nWhen SSR runs, this will produce:\n```html\n\u003cscript\u003e\nconst h = (window.__svelte ??= {}).h ??= new Map();\nconst r = (v) =\u003e Promise.resolve(v);\nfor (const [k, v] of [\n    [\"my_key\", r(\"\u003c/script\u003e\u003cscript\u003ealert(1)\u003c/script\u003e\")]\n]) {\n    h.set(k, v);\n}\n\u003c/script\u003e\n```\nThe browser parses this as:\n```html\n\u003cscript\u003e\nconst h = (window.__svelte ??= {}).h ??= new Map();\nconst r = (v) =\u003e Promise.resolve(v);\nfor (const [k, v] of [\n    [\"my_key\", r(\"\n\u003c/script\u003e\n\u003cscript\u003ealert(1)\u003c/script\u003e\n\")]\n]) {\n    h.set(k, v);\n}\n\u003c/script\u003e\n```\nThis triggers the alert, completely bypassing any CSP nonces/hashes as the second script block is parsed as a fresh inline script.",
+    "Snippet": "\\tasync #hydratable_block(ctx) {\n\\t\\tif (ctx.lookup.size === 0) {\n\\t\\t\\treturn null;\n\\t\\t}\n\n\\t\\tlet entries = [];\n\\t\\tlet has_promises = false;\n\n\\t\\tfor (const [k, v] of ctx.lookup) {\n\\t\\t\\tif (v.promises) {\n\\t\\t\\t\\thas_promises = true;\n\\t\\t\\t\\tfor (const p of v.promises) await p;\n\\t\\t\\t}\n\n\\t\\t\\tentries.push(`[${devalue.uneval(k)},${v.serialized}]`);\n\\t\\t}\n\n\\t\\tlet prelude = `const h = (window.__svelte ??= {}).h ??= new Map();`;\n\n\\t\\tif (has_promises) {\n\\t\\t\\tprelude = `const r = (v) =\u003e Promise.resolve(v);\n\\t\\t\\t\\t${prelude}`;\n\\t\\t}\n\n\\t\\tconst body = `\n\\t\\t\\t{\n\\t\\t\\t\\t${prelude}\n\n\\t\\t\\t\\tfor (const [k, v] of [\n\\t\\t\\t\\t\\t${entries.join(',\\\\n\\\\t\\\\t\\\\t\\\\t\\\\t')}\n\\t\\t\\t\\t]) {\n\\t\\t\\t\\t\\th.set(k, v);\n\\t\\t\\t\\t}\n\\t\\t\\t}\n\\t\\t`;\n\n\\t\\tlet csp_attr = '';\n\\t\\tif (this.global.csp.nonce) {\n\\t\\t\\tcsp_attr = ` nonce=\\\"${this.global.csp.nonce}\\\"`;\n\\t\\t} else if (this.global.csp.hash) {\n\\t\\t\\t// note to future selves: this doesn't need to be optimized with a Map\u003cbody, hash\u003e\n\\t\\t\\t// because the it's impossible for identical data to occur multiple times in a single render\n\\t\\t\\t// (this would require the same hydratable key:value pair to be serialized multiple times)\n\\t\\t\\tconst hash = await sha256(body);\n\\t\\t\\tthis.global.csp.script_hashes.push(`sha256-${hash}`);\n\\t\\t}\n\n\\t\\treturn `\\\\n\\\\t\\\\t\u003cscript${csp_attr}\u003e${body}\u003c/script\u003e`;\n\\t}",
+    "VulnType": "XSS",
+    "VulnID": "CWE-79",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 889,
+    "EndLine": 937,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

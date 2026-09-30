@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "1f46e02a-9221-573d-810e-51cd852bef5a",
+    "session_id": "ChA1NjU5MGZmZDdiNTI3NTQ1EAgaATAqBG1haW4",
+    "title": "Arbitrary Code Execution via Unsanitized Configuration Evaluated in eval()",
+    "file_path": "/home/jfplante_google_com/repos/p04-pytorch-geom_rep1/torch_geometric/graphgym/utils/agg_runs.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source:\nUntrusted user input can be provided through a GraphGym configuration YAML file or command-line options parsed by `load_cfg(cfg, args)` in `torch_geometric/graphgym/config.py`, which is then merged into the `cfg` node. Specifically, the configuration option `cfg.metric_agg` can be set to any user-defined string.\n\n### Sanitization/Validation:\nNo validation or sanitization is performed on the `cfg.metric_agg` value. It is directly read from the YAML/CLI input and stored in the configuration object.\n\n### Sink:\nThe dangerous sink is the `eval()` function in `torch_geometric/graphgym/utils/agg_runs.py` on line 110:\n`eval(\"performance_np.{}()\".format(cfg.metric_agg))`\nand line 237-238:\n`eval(\"performance_np.{}()\".format(cfg.metric_agg))`\n\n### Conceptual Exploit Payload:\nA user provides a configuration file (or uses `--opts` command-line argument) with the following value for `metric_agg`:\n`metric_agg: \"argmax(); import os; os.system('id')#\"`\nWhen `agg_runs` is invoked (for example, at the end of `graphgym/main.py`), the following string is evaluated:\n`performance_np.argmax(); import os; os.system('id')#()`\nThis executes the injected `os.system('id')` command, leading to arbitrary code execution.",
+    "snippet": "                best_epoch = \\\n                    stats_list[\n                        eval(\"performance_np.{}()\".format(cfg.metric_agg))][\n                        'epoch']",
+    "vuln_type": "CWE-95: Improper Neutralization of Expression in Template or Expression Language ('Eval Injection')",
+    "vuln_id": "CWE-95",
+    "status": "OPEN",
+    "start_line": 108,
+    "end_line": 111
+  },
+  {
+    "finding_id": "dfbc7329-0232-57fc-84d0-ef528da76641",
+    "session_id": "ChA1NjU5MGZmZDdiNTI3NTQ1EAgaATAqBG1haW4",
+    "title": "Path Traversal (Zip Slip / Tar Slip) via Unsafe Archive Extraction",
+    "file_path": "/home/jfplante_google_com/repos/p04-pytorch-geom_rep1/torch_geometric/data/extract.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source:\nAn untrusted tar/zip file (for example, downloaded from an external URL during dataset setup or provided by a user as a dataset archive).\n\n### Sanitization/Validation:\nNo sanitization or path verification is performed on the entries inside the zip/tar archives before calling `extractall()`.\n\n### Sink:\nThe sinks are `f.extractall(folder)` inside `extract_tar` (line 31) and `extract_zip` (line 45) in `torch_geometric/data/extract.py`.\n\n### Conceptual Exploit Payload:\nAn attacker hosts a malicious zip file containing a file named `../../../../../../tmp/evil.txt` (or targeting standard files like `~/.bashrc`). When a user downloads/processes a dataset that invokes `extract_zip` or `extract_tar`, the extraction writes to arbitrary paths outside the intended `folder` directory, potentially leading to arbitrary file write or local code execution.",
+    "snippet": "def extract_tar(\n    path: str,\n    folder: str,\n    mode: str = 'r:gz',\n    log: bool = True,\n) -\u003e None:\n    maybe_log(path, log)\n    with tarfile.open(path, mode) as f:\n        f.extractall(folder)\n\n\ndef extract_zip(path: str, folder: str, log: bool = True) -\u003e None:\n    maybe_log(path, log)\n    with zipfile.ZipFile(path, 'r') as f:\n        f.extractall(folder)",
+    "vuln_type": "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 14,
+    "end_line": 46
+  }
+]

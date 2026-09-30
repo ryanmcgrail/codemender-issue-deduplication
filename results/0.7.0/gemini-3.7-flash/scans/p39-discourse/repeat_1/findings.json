@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "4b86ab45",
+    "severity": "CRITICAL",
+    "vuln_type": "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine",
+    "file_path": "plugins/discourse-narrative-bot/plugin.rb",
+    "title": "Remote Code Execution / Server-Side Template Injection via Double Rendering in CertificatesController",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Remote Code Execution / Server-Side Template Injection via Double Rendering in CertificatesController",
+    "snippet": ""
+  },
+  {
+    "finding_id": "ff355ae7",
+    "severity": "HIGH",
+    "vuln_type": "CWE-862: Missing Authorization",
+    "file_path": "plugins/poll/lib/poll.rb",
+    "title": "Missing Authorization Check in Poll Grouped Results Leaking Secret/Staff-Only Poll Data",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Missing Authorization Check in Poll Grouped Results Leaking Secret/Staff-Only Poll Data",
+    "snippet": ""
+  }
+]

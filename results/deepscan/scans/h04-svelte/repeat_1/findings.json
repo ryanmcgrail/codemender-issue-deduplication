@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "dc35bfa1-2597-597d-8fa5-5f4fdc55f243",
+    "session_id": "ChAyZjI3MGIyN2RmZGVlMTRmEAgaATAqBG1haW4",
+    "title": "Path Traversal in Static File Serving in ssr-prod.js",
+    "file_path": "/home/jfplante_google_com/repos/h04-svelte_rep1/playgrounds/sandbox/ssr-prod.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `ssr-prod.js`, the Polka HTTP server serves static files by directly concatenating user-controlled `req.url` with `'./dist/client'` and resolving the path using `path.resolve`:\n```javascript\nconst file = path.resolve('./dist/client' + req.url);\n```\nThere is no validation or containment check (e.g., verifying `file.startsWith(...)` or preventing directory traversal sequences). As a result, an attacker can supply directory traversal sequences (`..`) in `req.url` to escape the `./dist/client` directory and read arbitrary files on the filesystem.\n\nData path:\n- Source: `req.url` from incoming HTTP request.\n- Sanitization/Validation: None.\n- Sink: `fs.createReadStream(file).pipe(res)`\n\nConceptual Exploit Payload:\n```http\nGET /../../../../etc/passwd HTTP/1.1\nHost: localhost:3000\n```\nThis causes `path.resolve('./dist/client/../../../../etc/passwd')` to resolve to `/etc/passwd`. Because `/etc/passwd` exists, `fs.existsSync(file)` returns true and `fs.createReadStream(file).pipe(res)` streams the contents of `/etc/passwd` back in the HTTP response.",
+    "snippet": "\t\tconst file = path.resolve('./dist/client' + req.url);\n\n\t\tif (fs.existsSync(file)) {\n\t\t\tconst type = types[path.extname(req.url)] ?? 'application/octet-stream';\n\t\t\tres.writeHead(200, { 'content-type': type });\n\t\t\tfs.createReadStream(file).pipe(res);\n\t\t\treturn;\n\t\t}",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 29,
+    "end_line": 36
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "830a7864-f4d4-53d8-98ae-98e497a85361",
+    "session_id": "ChAxZGY4Y2ZiY2IyZmYyMThiEAgaATAqBG1haW4",
+    "title": "Unchecked Deserialization in BloomFilter.readFrom Leads to JVM Memory Exhaustion Denial of Service (DoS)",
+    "file_path": "/home/jfplante_google_com/repos/p24-guava_rep1/guava/src/com/google/common/hash/BloomFilter.java",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "An untrusted input stream parsed by `BloomFilter.readFrom(InputStream, Funnel)` can trigger an immediate JVM OutOfMemoryError (Denial of Service) via resource exhaustion.\n\n### Data Flow\n- **Source**: Untrusted `InputStream in` is passed to `BloomFilter.readFrom(InputStream, Funnel)` (line 601).\n- **Insecure Parsing**: The method reads a 4-byte `dataLength` integer directly from the stream using `din.readInt()` (line 615).\n- **Sink**: The parsed `dataLength` is passed to the `LockFreeBitArray` constructor as `LongMath.checkedMultiply(dataLength, 64L)` (line 619). Inside the `LockFreeBitArray` constructor, `new AtomicLongArray` is called with a size derived from this untrusted parameter (equivalent to `dataLength`).\n\n### Vulnerability Mechanism\nAn attacker can supply a 6-byte serialized payload containing:\n1. `\\x00` (1 byte `strategyOrdinal`)\n2. `\\x01` (1 byte `numHashFunctions`)\n3. `\\x7f\\xff\\xff\\xff` (4 bytes `dataLength`, representing `2147483647`)\n\nThe JVM will immediately attempt to allocate an `AtomicLongArray` of size `2147483647` (requiring `16 GB` of continuous heap memory) before any data elements are read or verified from the stream. On most systems, this leads to an instant `java.lang.OutOfMemoryError` and crashes the thread/process.\n\n### Conceptual Exploit Payload\nA 6-byte input stream:\n`00 01 7F FF FF FF`\n\nWhere:\n- `00` maps to `BloomFilterStrategies.MURMUR128_MITZ_32` (valid ordinal)\n- `01` maps to `1` hash function\n- `7F FF FF FF` maps to `2147483647` (the maximum positive integer) as `dataLength`",
+    "snippet": "  public static \u003cT extends @Nullable Object\u003e BloomFilter\u003cT\u003e readFrom(\n      InputStream in, Funnel\u003c? super T\u003e funnel) throws IOException {\n    checkNotNull(in, \"InputStream\");\n    checkNotNull(funnel, \"Funnel\");\n    int strategyOrdinal = -1;\n    int numHashFunctions = -1;\n    int dataLength = -1;\n    try {\n      DataInputStream din = new DataInputStream(in);\n      // currently this assumes there is no negative ordinal; will have to be updated if we\n      // add non-stateless strategies (for which we've reserved negative ordinals; see\n      // Strategy.ordinal()).\n      strategyOrdinal = din.readByte();\n      numHashFunctions = UnsignedBytes.toInt(din.readByte());\n      dataLength = din.readInt();\n\n      Strategy strategy = BloomFilterStrategies.values()[strategyOrdinal];\n\n      LockFreeBitArray dataArray = new LockFreeBitArray(LongMath.checkedMultiply(dataLength, 64L));\n      for (int i = 0; i \u003c dataLength; i++) {\n        dataArray.putData(i, din.readLong());\n      }\n\n      return new BloomFilter\u003c\u003e(dataArray, numHashFunctions, funnel, strategy);",
+    "vuln_type": "Denial of Service",
+    "vuln_id": "CWE-400",
+    "status": "OPEN",
+    "start_line": 601,
+    "end_line": 624
+  }
+]

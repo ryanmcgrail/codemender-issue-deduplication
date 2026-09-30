@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "3fa95b1d-c7a8-5f85-a20a-6b3589dd251f",
+    "session_id": "ChBjZjU3MmM3OTU1ODQ0MjZmEAgaATAqBG1haW4",
+    "title": "Path Traversal in examples/server.js via Unsanitized URL in pipeFileToResponse",
+    "file_path": "/home/jfplante_google_com/repos/p08-axios_rep1/examples/server.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data flow trace:\n- Source: In `examples/server.js`, incoming HTTP request target `req.url` is read at line 82 from untrusted client requests.\n- Sanitization/Validation: Lines 109-111 append `index.html` if the URL ends in `/`, and line 120 checks if the URL matches `/index\\.html$/`. However, there is no validation or bounds checking to prevent directory traversal sequences (`../`). `path.join(__dirname, url)` resolves relative path components, allowing traversal outside the `examples` directory.\n- Sink: At line 122, `pipeFileToResponse(res, url, 'text/html')` is invoked, which calls `fs.createReadStream(path.join(__dirname, file)).pipe(res)` at line 75 to read the traversed file from the filesystem and stream its content to the HTTP response.\n\nConceptual Exploit Payload:\nSend an HTTP request such as:\n```http\nGET /../../coverage/lcov-report/index.html HTTP/1.1\nHost: localhost:3000\n```\nor\n```http\nGET /../../../../../../var/www/html/ HTTP/1.1\nHost: localhost:3000\n```\nThe server will resolve the path relative to `__dirname`, traversing out of the directory and streaming the target `index.html` file back to the client.",
+    "snippet": "  fs.createReadStream(path.join(__dirname, file)).pipe(res);",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 75,
+    "end_line": 75
+  }
+]

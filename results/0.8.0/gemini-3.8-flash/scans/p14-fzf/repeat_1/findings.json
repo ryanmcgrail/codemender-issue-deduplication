@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "774b09ab-3a8b-532d-9e90-73d4041d29f9",
+    "session_id": "ChBkN2MyOGZlYmFhZTE1NDYyEAgaATAqBG1haW4",
+    "title": "Cross-Site Request Forgery (CSRF) in Local HTTP Server Leading to Remote Code Execution",
+    "file_path": "/home/jfplante_google_com/repos/p14-fzf_rep1/src/server.go",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "### Summary\nfzf's `--listen` option starts a local HTTP server on `localhost` (default port or specified port). The HTTP server allows clients to send action lists via POST requests. When running on localhost, `FZF_API_KEY` is not required by default, and `terminal.go` treats `t.listenAddr.IsLocal()` as trusted, thereby permitting command execution actions (`actExecute`, `actBecome`, `actReload`, `actTransform`, etc.). Because the HTTP server performs no Cross-Site Request Forgery (CSRF) protection (no `Origin` or `Referer` validation, no `Host` header validation, no `Content-Type` restrictions, and no CSRF tokens), any website visited by a user whose system is running `fzf --listen` can send cross-origin requests to execute arbitrary OS commands on the user's system.\n\n### Trace\n- **Source**: Untrusted HTTP POST request issued by a victim's web browser when navigating to an attacker-controlled web page (e.g., `Origin: https://malicious.com`).\n- **Sanitization/Validation**:\n  1. In `src/server.go` (`handleHttpRequest`), there is no validation of the `Origin`, `Referer`, or `Host` headers.\n  2. No CSRF token is required.\n  3. No authentication is enforced when `server.apiKey` is not configured (the default when running `fzf --listen`).\n  4. In `src/terminal.go` line 3627, `if t.listenAddr == nil || t.listenAddr.IsLocal() || t.listenUnsafe`, `t.listenAddr.IsLocal()` evaluates to `true`, disabling the `processExecution()` filter and allowing execution actions received from the HTTP channel.\n- **Sink**: `src/terminal.go` line 3744 (`t.executeCommand(a.a, ...)`), which executes arbitrary shell commands through `t.executor.ExecCommand(command, false).Run()`.\n\n### Conceptual Exploit Payload\nA malicious webpage hosts the following script:\n```html\n\u003cscript\u003e\nfetch('http://localhost:6266/', {\n  method: 'POST',\n  mode: 'no-cors',\n  headers: {\n    'Content-Type': 'text/plain'\n  },\n  body: 'execute(touch /tmp/pwned)'\n});\n\u003c/script\u003e\n```\nBecause `text/plain` is a CORS-safelisted request header, the browser submits the HTTP POST request without sending an `OPTIONS` preflight request. fzf parses the body as `execute(touch /tmp/pwned)` via `parseSingleActionList()`, passes it to `t.serverInputChan`, and immediately executes `touch /tmp/pwned` via the user's shell.",
+    "snippet": "\tactions, err := parseSingleActionList(strings.Trim(string(body), \"\\r\\n\"))\n\tif err != nil {\n\t\treturn bad(err.Error())\n\t}\n\tif len(actions) == 0 {\n\t\treturn bad(\"no action specified\")\n\t}\n\n\tselect {\n\tcase server.actionChannel \u003c- actions:\n\tcase \u003c-time.After(channelTimeout):\n\t\treturn httpUnavailable + crlf\n\t}",
+    "vuln_type": "Cross-Site Request Forgery (CSRF)",
+    "vuln_id": "CWE-352",
+    "status": "OPEN",
+    "start_line": 218,
+    "end_line": 231
+  },
+  {
+    "finding_id": "c133bb8a-6beb-50f8-828d-8cfe53b99396",
+    "session_id": "ChBkN2MyOGZlYmFhZTE1NDYyEAgaATAqBG1haW4",
+    "title": "Authentication Bypass on GET Requests in HTTP Server (CWE-306)",
+    "file_path": "/home/jfplante_google_com/repos/p14-fzf_rep1/src/server.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Summary\nfzf provides an embedded HTTP server (enabled via `--listen` or `--listen-unsafe`), which can be bound to remote interfaces by supplying an API key (`FZF_API_KEY`) as required by `startHttpServer` (line 80). The HTTP server endpoint `GET /` is designed to report program status (including the query string, current selection, matched items, and counts in JSON format). However, the HTTP request handler `handleHttpRequest` returns the status JSON immediately during request line parsing in `case 0` without reading headers or verifying `server.apiKey`.\n\n### Trace\n- **Source**: Untrusted network TCP connection / HTTP request line `GET / HTTP/1.1\\r\\nHost: ...\\r\\n\\r\\n` sent to the fzf HTTP server.\n- **Sanitization/Validation**: The API key verification logic `subtle.ConstantTimeCompare([]byte(apiKey), server.apiKey)` is located at line 209, outside the request line parsing switch. However, for any request starting with `GET /`, the handler immediately enters the block at line 167, sends `actResponse` to `server.actionChannel`, waits on `server.responseChannel`, and returns `good(response)` (HTTP 200 OK with the JSON body). The headers are never parsed, and the check at line 209 is completely bypassed.\n- **Sink**: `server.actionChannel \u003c- []*action{{t: actResponse, a: getMatch[1]}}` and `return good(response)` at line 171, emitting confidential state to unauthenticated clients.\n\n### Conceptual Exploit Payload\nA remote attacker connects to the fzf HTTP service (e.g., listening on `0.0.0.0:6266` with `FZF_API_KEY=supersecretkey`) and sends:\n```http\nGET /?limit=1000 HTTP/1.1\nHost: target-ip:6266\n\n```\nThe server immediately responds with:\n```http\nHTTP/1.1 200 OK\nContent-Type: application/json\nContent-Length: ...\n\n{\"reading\":false,\"progress\":100,\"query\":\"secret_query\",\"position\":0,\"sort\":true,\"total\":...,\"matched\":...,\"current\":{\"index\":0,\"text\":\"secret_item\"},\"matches\":[...],\"selected\":[...]}\n```\nNo `x-api-key` header is required, and any unauthenticated attacker on the network can dump sensitive items, selection state, and queries.",
+    "snippet": "\t\t\tgetMatch := getRegex.FindStringSubmatch(text)\n\t\t\tif len(getMatch) \u003e 0 {\n\t\t\t\tserver.actionChannel \u003c- []*action{{t: actResponse, a: getMatch[1]}}\n\t\t\t\tselect {\n\t\t\t\tcase response := \u003c-server.responseChannel:\n\t\t\t\t\treturn good(response)\n\t\t\t\tcase \u003c-time.After(channelTimeout):\n\t\t\t\t\tgo func() {\n\t\t\t\t\t\t// Drain the channel\n\t\t\t\t\t\t\u003c-server.responseChannel\n\t\t\t\t\t}()\n\t\t\t\t\treturn answer(httpUnavailable+jsonContentType, `{\"error\":\"timeout\"}`)\n\t\t\t\t}\n\t\t\t}",
+    "vuln_type": "Missing Authentication for Critical Function",
+    "vuln_id": "CWE-306",
+    "status": "OPEN",
+    "start_line": 166,
+    "end_line": 178
+  }
+]

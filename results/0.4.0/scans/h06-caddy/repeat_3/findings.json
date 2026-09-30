@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "fed59d69-20b4-51d5-a51f-721282f5c335",
+    "SessionID": "ChBiM2FjNDc4ZTQ0ZTk5YzRhEAgaATAqBG1haW4",
+    "Title": "Open Redirect (CWE-601) via Backslash Bypass in File Server Canonical Redirects",
+    "FilePath": "/home/jfplante_google_com/repos/h06-caddy_rep3/modules/caddyhttp/fileserver/staticfiles.go",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `redirect` function in `modules/caddyhttp/fileserver/staticfiles.go` is vulnerable to Open Redirect (CWE-601). \n\n### Data Flow Trace\n- **Source**: Untrusted user-supplied request path (`origReq.URL.Path`), accessed when canonicalizing directory or file paths (e.g., adding a trailing slash). For example, a request path like `/\\\\attacker.com/../images`.\n- **Sanitization**: The `redirect` function tries to mitigate path-based open redirects using a loop that checks `strings.HasPrefix(toPath, \"//\")` and strips leading slashes. However, this logic is insufficient because it only checks for forward slashes (`/`) and completely ignores backslashes (`\\`).\n- **Sink**: The unsanitized `toPath` is passed directly to `http.Redirect`, which writes a `Location` header containing the relative-looking path `Location: /\\\\attacker.com/../images/`.\n\n### Conceptual Exploit Payload\nA client sends an HTTP request to Caddy with a path containing a backslash followed by an attacker's domain, traversing back to a valid existing directory (e.g., `images`):\n```http\nGET /%5C%5Cattacker.com/../images HTTP/1.1\nHost: vulnerable-caddy-server.com\n```\n\nUpon parsing, `r.URL.Path` becomes `/\\\\attacker.com/../images`. Caddy's `SanitizedPathJoin` cleans this path to `/images` because `path.Clean` (which uses `/` only) treats `\\\\attacker.com` as a single directory name and resolves the `..` traversal, leading to a valid directory `/images`. \n\nSince the request does not end in a slash, Caddy's URL canonicalization logic appends a slash and triggers a redirect to:\n`to := origReq.URL.Path + \"/\"` (i.e. `/\\\\attacker.com/../images/`)\n\nThe `redirect` function is called with `/\\\\attacker.com/../images/`. Because it starts with `/\\\\` (not `//`), the stripping loop is bypassed. Caddy then returns:\n```http\nHTTP/1.1 308 Permanent Redirect\nLocation: /\\\\attacker.com/../images/\n```\n\nWhen a modern web browser (e.g., Google Chrome or Apple Safari) receives this response, it normalizes the backslash `\\` to a forward slash `/`, interpreting the location header as `//attacker.com/../images/` (a protocol-relative absolute URL), and redirects the user to `http://attacker.com`.",
+    "Snippet": "func redirect(w http.ResponseWriter, r *http.Request, toPath string) error {\n\tfor strings.HasPrefix(toPath, \"//\") {\n\t\t// prevent path-based open redirects\n\t\ttoPath = strings.TrimPrefix(toPath, \"/\")\n\t}\n\t// preserve the query string if present\n\tif r.URL.RawQuery != \"\" {\n\t\ttoPath += \"?\" + r.URL.RawQuery\n\t}\n\thttp.Redirect(w, r, toPath, http.StatusPermanentRedirect)\n\treturn nil\n}",
+    "VulnType": "CWE-601",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 700,
+    "EndLine": 711,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "dc4042ba-a520-54eb-b228-a9bacffe8133",
+    "SessionID": "ChBlMTg5YmFlNTkwNDdmMjFhEAgaATAqBG1haW4",
+    "Title": "XML External Entity (XXE) Injection in EncryptedXmlDecryptor",
+    "FilePath": "/home/jfplante_google_com/repos/p40-aspnet-core_rep5/src/DataProtection/DataProtection/src/XmlEncryption/EncryptedXmlDecryptor.cs",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "In `src/DataProtection/DataProtection/src/XmlEncryption/EncryptedXmlDecryptor.cs`, the `Decrypt` method receives an untrusted XML element (`encryptedElement` of type `XElement`) and loads it into an `XmlDocument` object using `xmlDocument.Load(new XElement(\\\"root\\\", encryptedElement).CreateReader())`. Since `XmlDocument` by default enables DTD processing/entity expansion or doesn't explicitly restrict external DTD resolution unless configured via `XmlReaderSettings`, parsing this user-supplied XML could lead to XML External Entity (XXE) injection or XML entity expansion (Billion Laughs) vulnerabilities. An attacker who can control or influence the XML passed to the `Decrypt` method could exploit this to read sensitive local files, perform SSRF, or trigger a Denial of Service (DoS) via resource exhaustion.\n\n**Conceptual Exploit Payload:**\n```xml\n\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE root [\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e\n]\u003e\n\u003cEncryptedData Type=\"http://www.w3.org/2001/04/xmlenc#Element\" xmlns=\"http://www.w3.org/2001/04/xmlenc#\"\u003e\n  \u003cCipherData\u003e\n    \u003cCipherValue\u003e\u0026xxe;\u003c/CipherValue\u003e\n  \u003c/CipherData\u003e\n\u003c/EncryptedData\u003e\n```",
+    "Snippet": "    public XElement Decrypt(XElement encryptedElement)\n    {\n        ArgumentNullThrowHelper.ThrowIfNull(encryptedElement);\n\n        // \u003cEncryptedData Type=\"http://www.w3.org/2001/04/xmlenc#Element\" xmlns=\"http://www.w3.org/2001/04/xmlenc#\"\u003e\n        //   ...\n        // \u003c/EncryptedData\u003e\n\n        // EncryptedXml works with XmlDocument, not XLinq. When we perform the conversion\n        // we'll wrap the incoming element in a dummy \u003croot /\u003e element since encrypted XML\n        // doesn't handle encrypting the root element all that well.\n        var xmlDocument = new XmlDocument();\n        xmlDocument.Load(new XElement(\"root\", encryptedElement).CreateReader());\n\n        // Perform the decryption and update the document in-place.\n        var encryptedXml = new EncryptedXmlWithCertificateKeys(_options, xmlDocument);\n        _decryptor.PerformPreDecryptionSetup(encryptedXml);\n\n        encryptedXml.DecryptDocument();\n\n        // Strip the \u003croot /\u003e element back off and convert the XmlDocument to an XElement.\n        return XElement.Load(xmlDocument.DocumentElement!.FirstChild!.CreateNavigator()!.ReadSubtree());\n    }",
+    "VulnType": "CWE-611",
+    "VulnID": "CWE-611",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 57,
+    "EndLine": 80,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

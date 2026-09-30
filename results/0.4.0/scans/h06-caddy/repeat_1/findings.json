@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "0773c133-31fe-5c8e-b733-0931a0c5bc4a",
+    "SessionID": "ChA3NDBhMDQzMWQ1YjBjN2EwEAgaATAqBG1haW4",
+    "Title": "Concurrent Write / Data Race via Unsafe Append on Shared Slice in BasicAuth Cache Key Generation",
+    "FilePath": "/home/jfplante_google_com/repos/h06-caddy_rep1/modules/caddyhttp/caddyauth/basicauth.go",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "The basicauth module in Caddy implements a password hashing cache that stores the result of basic authentication checks.\nWhen checking a user's password, `correctPassword` computes a cache key as follows (at line 176):\n```go\ncacheKey := hex.EncodeToString(append(account.password, plaintextPassword...))\n```\nIn Go, `account` is passed by value, but its `.password` field is a `[]byte` slice. Passing a struct by value only copies the slice header, meaning `account.password` still points to the same underlying backing array of `hba.Accounts[username].password` or `hba.fakePassword` (the shared global anti-timing fake password).\n\nWhen `append` is called on `account.password` with `plaintextPassword`, if the capacity of `account.password` is greater than its length, the Go runtime will modify the backing array directly in-place without allocating a new slice. Since this backing array is shared between different threads and requests (such as concurrent requests attempting to log in, or multiple concurrent requests for non-existent users mutating `hba.fakePassword`), this causes a concurrent write on a shared memory address without any synchronization or locking.\n\nThis results in a critical **Data Race / Race Condition** that can lead to:\n1. Memory corruption or panics in the Go runtime.\n2. Cache key pollution, where concurrent requests contaminate each other's cache keys with their plaintext passwords. This can lead to unpredictable cache lookups, potential authentication bypass (where a correct login result for one user is retrieved for a different request because of a contaminated cache key), or denial of service.\n\n### Conceptual Exploit / PoC Scenario:\nAn attacker launches many concurrent HTTP basic auth requests targeting either existing accounts or a non-existent account (which triggers the use of the shared `hba.fakePassword` slice):\n\n```http\nRequest 1:\nGET /restricted HTTP/1.1\nHost: target.caddy.local\nAuthorization: Basic dGVzdDE6YmFkcGFzc3dvcmQx\n\nRequest 2 (concurrently):\nGET /restricted HTTP/1.1\nHost: target.caddy.local\nAuthorization: Basic dGVzdDI6YmFkcGFzc3dvcmQy\n```\n\nSince both requests concurrently call `append` on the shared slice backing array, they will overwrite the memory at the capacity offset of `hba.fakePassword` or `account.password` at the same time. The calculated `cacheKey` strings for both requests can collide or contain interleaved data, leading to a race condition in the `hba.HashCache.cache` map lookup or storage. If Go's race detector is enabled, the program will immediately terminate (denial of service). If not, the map keys will be corrupted.\n\n### Mitigation:\nAlways clone the slice before appending to it to ensure no shared memory is modified:\n```go\ntemp := make([]byte, len(account.password) + len(plaintextPassword))\ncopy(temp, account.password)\ncopy(temp[len(account.password):], plaintextPassword)\ncacheKey := hex.EncodeToString(temp)\n```",
+    "Snippet": "func (hba HTTPBasicAuth) correctPassword(account Account, plaintextPassword []byte) (bool, error) {\n\tcompare := func() (bool, error) {\n\t\treturn hba.Hash.Compare(account.password, plaintextPassword)\n\t}\n\n\t// if no caching is enabled, simply return the result of hashing + comparing\n\tif hba.HashCache == nil {\n\t\treturn compare()\n\t}\n\n\t// compute a cache key that is unique for these input parameters\n\tcacheKey := hex.EncodeToString(append(account.password, plaintextPassword...))",
+    "VulnType": "Race Condition",
+    "VulnID": "CWE-362",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 165,
+    "EndLine": 185,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

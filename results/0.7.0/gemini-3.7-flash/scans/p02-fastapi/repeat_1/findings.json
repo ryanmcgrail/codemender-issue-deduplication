@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "ac0566bc",
+    "severity": "HIGH",
+    "vuln_type": "Incorrect Authorization",
+    "file_path": "fastapi/dependencies/utils.py",
+    "title": "In-Place Mutation of Security Scopes Causes Scope Pollution and Authorization Inconsistencies",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "In-Place Mutation of Security Scopes Causes Scope Pollution and Authorization Inconsistencies",
+    "snippet": ""
+  }
+]

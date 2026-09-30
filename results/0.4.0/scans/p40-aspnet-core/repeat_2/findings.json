@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "50420b19-cfbb-5f50-8131-c0c0c8a82af3",
+    "SessionID": "ChBmODQ3NWRlOGNlYjBiMDZhEAgaATAqBG1haW4",
+    "Title": "LDAP Injection in LdapAdapter LDAP search filter formulation",
+    "FilePath": "src/Security/Authentication/Negotiate/src/Internal/LdapAdapter.cs",
+    "Severity": "HIGH",
+    "Confidence": 80,
+    "Analysis": "The LDAP authentication settings in `LdapAdapter.cs` construct LDAP search filters using string interpolation with untrusted input `userAccountName` and `groupCN` obtained from Negotiate/Active Directory claims (which are initially provided via the client's Windows/Negotiate domain authentication). Under certain configurations, an attacker authenticated to a domain could manipulate their `sAMAccountName` (which forms part of their identity.Name) or the group names, leading to LDAP injection in the LDAP search filter `\\\"(\u0026(objectClass=user)(sAMAccountName={userAccountName}))\\\"` or `\\\"(\u0026(objectClass=group)(sAMAccountName={groupCN}))\\\"`. Although `identity.Name` is established via authentication, it can contain arbitrary characters depending on domain/NTLM/AD configuration, and when passed to `RetrieveClaimsAsync`, it is not sanitized or escaped for LDAP filter syntax (e.g., characters like `*`, `(`, `)`, `\\`, or `\\0` are not escaped), potentially modifying the LDAP query structure.\nConceptual Exploit Payload:\nA user named `*` or `admin)(objectClass=user` could bypass the sAMAccountName match or inject custom search filters, altering the search behavior on the Active Directory server to fetch/map membership claims of other users.",
+    "Snippet": "        var filter = $\"(\u0026(objectClass=user)(sAMAccountName={userAccountName}))\"; // This is using ldap search query language, it is looking on the server for someUser\n        var searchRequest = new SearchRequest(distinguishedName, filter, SearchScope.Subtree);",
+    "VulnType": "Injection",
+    "VulnID": "CWE-90",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 44,
+    "EndLine": 106,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

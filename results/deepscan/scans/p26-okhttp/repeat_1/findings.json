@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "99ac8e62-acf9-5176-a169-c301a58eb48c",
+    "session_id": "ChA2NzUwYmM3ODk1ZjE2NjY2EAgaATAqBG1haW4",
+    "title": "Path Traversal in Http2Server via HTTP/2 :path header",
+    "file_path": "/home/jfplante_google_com/repos/p26-okhttp_rep1/mockwebserver/src/test/java/okhttp3/mockwebserver/internal/http2/Http2Server.java",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Flow Analysis:\n- Source: Untrusted HTTP/2 request `:path` pseudo-header (`Header.TARGET_PATH_UTF8`), extracted from `stream.takeHeaders()` in `Http2Server.onStream(Http2Stream)` (lines 105-110).\n- Sanitization/Validation: None. The only check performed is `if (path == null)` (lines 114-117). There is no verification that the canonical path resides within `baseDirectory` or check against `..` traversal sequences.\n- Sink: `new File(baseDirectory + path)` (line 119). The resulting `File` object is subsequently passed to `serveFile(stream, file)` (line 124), which reads the file via `Okio.source(file)` and streams the content back to the client, or `serveDirectory(stream, file.listFiles())` (line 122), exposing directory contents.\n\nConceptual Exploit Payload:\nAn HTTP/2 client connects to the server and sends a request stream with headers:\n```\n:method = GET\n:scheme = https\n:authority = localhost:8888\n:path = /../../../../etc/passwd\n```\nThe server concatenates `baseDirectory` with `/../../../../etc/passwd`, resolving outside `baseDirectory` to `/etc/passwd`, and returns status 200 along with the contents of `/etc/passwd`.",
+    "snippet": "      File file = new File(baseDirectory + path);\n\n      if (file.isDirectory()) {\n        serveDirectory(stream, file.listFiles());\n      } else if (file.exists()) {\n        serveFile(stream, file);\n      } else {\n        send404(stream, path);\n      }",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 119,
+    "end_line": 127
+  }
+]

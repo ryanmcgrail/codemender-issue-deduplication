@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "6410de03",
+    "severity": "HIGH",
+    "vuln_type": "Server-Side Request Forgery (SSRF)",
+    "file_path": "lib/core/buildFullPath.js",
+    "title": "Server-Side Request Forgery (SSRF) and Credential Leakage via baseURL Bypass in buildFullPath",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side Request Forgery (SSRF) and Credential Leakage via baseURL Bypass in buildFullPath",
+    "snippet": ""
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "0235e521-f4bf-5cef-bce4-026bd31b7cdf",
+    "SessionID": "ChA2YzYwNDFhZDFlNzk1NzM0EAgaATAqBG1haW4",
+    "Title": "Path Traversal/Arbitrary Module Directory Spoofing via manifest.json in Planfile Configuration Snapshot",
+    "FilePath": "/home/jfplante_google_com/repos/p17-opentofu_rep2/internal/plans/planfile/config_snapshot.go",
+    "Severity": "HIGH",
+    "Confidence": 80,
+    "Analysis": "The `readConfigSnapshot` function parses a ZIP archive containing a saved plan's configuration snapshot. For each file in the ZIP, it extracts files prefixed with `tfconfig/m-`. It uses `path.Split` on the remaining file path to get the `moduleKey` and `fileName`:\n```go\nmoduleKey, fileName := path.Split(relName)\n```\nLater, it parses the snapshot's manifest file (`tfconfig/modules.json`), which maps each module's `Key` to a directory on the local disk via the `Dir` field. The function parses this manifest into a list of records:\n```go\ntype configSnapshotModuleRecord struct {\n    Key        string `json:\\\"Key\\\"`\n    SourceAddr string `json:\\\"Source,omitempty\\\"`\n    VersionStr string `json:\\\"Version,omitempty\\\"`\n    Dir        string `json:\\\"Dir\\\"`\n}\n```\nAnd updates the extracted module's directory path:\n```go\nfor _, record := range manifest {\n    modSnap, exists := snap.Modules[record.Key]\n    ...\n    modSnap.Dir = record.Dir\n}\n```\nHowever, the `record.Dir` path is taken directly from the manifest file in the untrusted plan zip file without validation. Later, when the loader attempts to parse this module from the snapshot, it creates a `snapshotFS` virtual filesystem.\nIn `snapshotFS.Open(name)`:\n```go\ndir := filepath.Dir(name)\nfn := filepath.Base(name)\n...\nvar modSnap *SnapshotModule\nfor _, candidate := range fs.snap.Modules {\n    modDir := filepath.Clean(candidate.Dir)\n    if modDir == dir {\n        modSnap = candidate\n        break\n    }\n}\n```\nIf a malicious plan file specifies an arbitrary directory path (such as an absolute path `C:\\\\windows\\\\system32` or `/etc`) or path traversal sequences (like `../../../../etc`) in `record.Dir` within `tfconfig/modules.json`, `modDir` will clean to that malicious target path.\nWhen the config loader attempts to read files from that directory path using the parser (via `loader.LoadConfig(rootDir)`), it will look up the directory `dir` in the virtual snapshot filesystem. Because `modDir == dir` matches, the snapshot filesystem returns the fake configuration file contents supplied in the zip file (`snapMod.Files[fn]`).\nThis allows an attacker who controls the plan file to spoof HCL configuration files for arbitrary paths, which can bypass module directory boundaries or lead to arbitrary configuration injection.\n\nConceptual Exploit Payload:\nCreate a plan zip file containing:\n1. A file named `tfconfig/m-mymodule/main.tf` with malicious HCL code.\n2. A manifest file `tfconfig/modules.json` containing:\n```json\n[\n  {\n    \"Key\": \"mymodule\",\n    \"Dir\": \"/etc/malicious-config-spoof\"\n  }\n]\n```\nWhen this plan file is parsed and applied, it will treat `/etc/malicious-config-spoof` as the module's source directory but serve the attacker's `main.tf` contents from the zip archive, potentially tricking the application into running arbitrary actions or injecting malicious configurations into specific filesystem locations during configuration loading.",
+    "Snippet": "\tfor _, record := range manifest {\n\t\tmodSnap, exists := snap.Modules[record.Key]\n\t\tif !exists {\n\t\t\t// We'll allow this, assuming that it's a module with no files.\n\t\t\t// This is still weird, since we generally reject modules with\n\t\t\t// no files, but we'll allow it because downstream errors will\n\t\t\t// catch it in that case.\n\t\t\tmodSnap = \u0026configload.SnapshotModule{\n\t\t\t\tFiles: map[string][]byte{},\n\t\t\t}\n\t\t\tsnap.Modules[record.Key] = modSnap\n\t\t}\n\t\tmodSnap.SourceAddr = record.SourceAddr\n\t\tmodSnap.Dir = record.Dir\n\t\tif record.VersionStr != \"\" {\n\t\t\tv, err := version.NewVersion(record.VersionStr)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"manifest has invalid version string %q for module %q\", record.VersionStr, record.Key)\n\t\t\t}\n\t\t\tmodSnap.Version = v\n\t\t}\n\t}",
+    "VulnType": "Path Traversal",
+    "VulnID": "CWE-22",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 108,
+    "EndLine": 130,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

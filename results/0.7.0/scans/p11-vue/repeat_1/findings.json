@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "6b843aab-b8d6-51f7-b81f-63b415036405",
+    "session_id": "ChAzZDg4NWM3ZTUxOGE0NTZlEAgaATAqBG1haW4",
+    "title": "Bypass of escapeHtmlComment leading to Server-Side Rendering (SSR) Cross-Site Scripting (XSS)",
+    "file_path": "/home/jfplante_google_com/repos/p11-vue_rep1/packages/shared/src/escapeHtml.ts",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Data Flow Trace\n- **Source**: Dynamic/untrusted user input is passed as children to a `Comment` VNode (e.g., inside JSX, render functions, or a dynamic component).\n- **Sanitization/Validation**: The input is passed to `escapeHtmlComment` in `packages/shared/src/escapeHtml.ts`, which attempts to strip dangerous sequences like `\u003c!--`, `--\u003e`, and `--!\u003e` via `commentStripRE = /^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$/g`. However, because it runs globally only once and uses simple substitution without recursion, it can be bypassed using nested comment tags.\n- **Sink**: The returned string is wrapped in comment start/end tags in `renderVNode` (`packages/server-renderer/src/render.ts`):\n  `children ? '\u003c!--' + escapeHtmlComment(children as string) + '--\u003e' : '\u003c!----\u003e'`\n  and pushed directly into the SSR-rendered HTML string.\n\n### Conceptual Exploit Payload\n- **User Input / Payload**: `\u003c!-\u003c!---\u003e-\u003e \u003cscript\u003ealert(1)\u003c/script\u003e`\n- **Detailed Explanation**:\n  1. The input `'\u003c!-\u003c!---\u003e-\u003e \u003cscript\u003ealert(1)\u003c/script\u003e'` is processed by `escapeHtmlComment`.\n  2. The `commentStripRE` regex matches `\u003c!--` inside the input.\n  3. The `\u003c!--` is removed, and no other matches are found since the anchors `^` and `$` do not match and other patterns are not present.\n  4. The function returns: `'\u003c!--\u003e-\u003e \u003cscript\u003ealert(1)\u003c/script\u003e'`.\n  5. The server-renderer embeds this into comment boundaries:\n     `\u003c!--\u003c!--\u003e-\u003e \u003cscript\u003ealert(1)\u003c/script\u003e--\u003e`\n  6. When the client browser parses this HTML:\n     - `\u003c!--\u003c!--\u003e` is interpreted as a comment block because `\u003c!--` starts a comment, and `\u003c` and `!` are consumed as comment text, then `-` and `-` and `\u003e` form `--\u003e`, ending the comment immediately.\n     - The parser exits the comment state and treats `-\u003e \u003cscript\u003ealert(1)\u003c/script\u003e--\u003e` as plain HTML.\n     - The `\u003cscript\u003e` tag is executed, resulting in Cross-Site Scripting (XSS).",
+    "snippet": "const commentStripRE = /^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$/g\n\nexport function escapeHtmlComment(src: string): string {\n  return src.replace(commentStripRE, '')\n}",
+    "vuln_type": "XSS",
+    "vuln_id": "CWE-116",
+    "status": "OPEN",
+    "start_line": 48,
+    "end_line": 52
+  }
+]

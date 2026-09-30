@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "8023927e",
+    "severity": "CRITICAL",
+    "vuln_type": "Code Injection",
+    "file_path": "lodash.js",
+    "title": "Arbitrary Code Execution / Code Injection via options.imports in lodash.template",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary Code Execution / Code Injection via options.imports in lodash.template",
+    "snippet": ""
+  }
+]

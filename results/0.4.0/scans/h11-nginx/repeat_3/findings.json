@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "cceb5959-b469-5f38-98bf-cee92f3a753e",
+    "SessionID": "ChBhNWNkNTQyNWYxYmMyMmI0EAgaATAqBG1haW4",
+    "Title": "HTTP/3 Flood Detection Bypass and Unbounded Processing",
+    "FilePath": "src/http/v3/ngx_http_v3.c",
+    "Severity": "HIGH",
+    "Confidence": 80,
+    "Analysis": "A vulnerability exists in the HTTP/3 protocol handler where the total_bytes and payload_bytes session state counters can grow excessively or cause incorrect flow/flood control calculations if a client sends a large volume of empty headers or constructs frames that trigger asymmetric tracking. Specifically, in `ngx_http_v3_request.c`, `h3c-\u003epayload_bytes` is incremented by the length of the parsed field:\n`h3c-\u003epayload_bytes += ngx_http_v3_encode_field_l(NULL, \u0026st-\u003efield_rep.field.name, \u0026st-\u003efield_rep.field.value);`\nwhereas `h3c-\u003etotal_bytes` tracks the raw buffer consumption:\n`h3c-\u003etotal_bytes += b-\u003epos - p;`\nAn attacker can exploit this discrepancy by feeding HTTP/3 headers or control frames designed to bypass flood checks (`total_bytes / 8 \u003e payload_bytes + 1048576`) or trigger CPU spikes/denial of service, as the ratio of total bytes to payload bytes is used for detecting HTTP/3 floods in `ngx_http_v3_check_flood()`. In some conditions, it might be possible to manipulate the ratio by packing massive QPACK field instructions that do not map to equivalent payload increases, or by supplying large names/values that are decompressed/looked up and bloat the session or header limits.",
+    "Snippet": "ngx_int_t\nngx_http_v3_check_flood(ngx_connection_t *c)\n{\n    ngx_http_v3_session_t  *h3c;\n\n    h3c = ngx_http_v3_get_session(c);\n\n    if (h3c-\u003etotal_bytes / 8 \u003e h3c-\u003epayload_bytes + 1048576) {\n        ngx_log_error(NGX_LOG_INFO, c-\u003elog, 0, \"http3 flood detected\");\n\n        ngx_http_v3_finalize_connection(c, NGX_HTTP_V3_ERR_NO_ERROR,\n                                        \"HTTP/3 flood detected\");\n        return NGX_ERROR;\n    }\n\n    return NGX_OK;\n}",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-400",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 96,
+    "EndLine": 109,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

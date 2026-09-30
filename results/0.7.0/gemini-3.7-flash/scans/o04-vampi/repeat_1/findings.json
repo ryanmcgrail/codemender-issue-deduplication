@@ -1,0 +1,98 @@
+[
+  {
+    "finding_id": "48abc068",
+    "severity": "HIGH",
+    "vuln_type": "SQL Injection",
+    "file_path": "models/user_model.py",
+    "title": "SQL Injection in User Lookup Endpoint",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "SQL Injection in User Lookup Endpoint",
+    "snippet": ""
+  },
+  {
+    "finding_id": "3a4de962",
+    "severity": "CRITICAL",
+    "vuln_type": "Improper Access Control - BOLA / IDOR",
+    "file_path": "api_views/users.py",
+    "title": "Broken Object Level Authorization (BOLA) Leading to Arbitrary Password Reset",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Broken Object Level Authorization (BOLA) Leading to Arbitrary Password Reset",
+    "snippet": ""
+  },
+  {
+    "finding_id": "d8ac73cc",
+    "severity": "HIGH",
+    "vuln_type": "Mass Assignment",
+    "file_path": "api_views/users.py",
+    "title": "Mass Assignment / Privilege Escalation via User Registration",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Mass Assignment / Privilege Escalation via User Registration",
+    "snippet": ""
+  },
+  {
+    "finding_id": "ec176ed2",
+    "severity": "HIGH",
+    "vuln_type": "Improper Access Control - BOLA / IDOR",
+    "file_path": "api_views/books.py",
+    "title": "Broken Object Level Authorization (BOLA) on Book Retrieval Endpoint",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Broken Object Level Authorization (BOLA) on Book Retrieval Endpoint",
+    "snippet": ""
+  },
+  {
+    "finding_id": "bc3065c0",
+    "severity": "CRITICAL",
+    "vuln_type": "Use of Hard-coded Credentials",
+    "file_path": "config.py",
+    "title": "Hardcoded JWT Secret Key Leading to Authentication Bypass",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Hardcoded JWT Secret Key Leading to Authentication Bypass",
+    "snippet": ""
+  },
+  {
+    "finding_id": "95afe91b",
+    "severity": "CRITICAL",
+    "vuln_type": "Exposure of Sensitive Information",
+    "file_path": "api_views/users.py",
+    "title": "Sensitive Data Exposure of User Credentials via Debug Endpoint",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Sensitive Data Exposure of User Credentials via Debug Endpoint",
+    "snippet": ""
+  },
+  {
+    "finding_id": "7b09e1cc",
+    "severity": "HIGH",
+    "vuln_type": "Regular Expression Denial of Service (ReDoS)",
+    "file_path": "api_views/users.py",
+    "title": "Regular Expression Denial of Service (ReDoS) in Email Validator",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Regular Expression Denial of Service (ReDoS) in Email Validator",
+    "snippet": ""
+  },
+  {
+    "finding_id": "a7474c9d",
+    "severity": "HIGH",
+    "vuln_type": "Missing Authentication for Critical Function",
+    "file_path": "api_views/main.py",
+    "title": "Missing Authentication on Database Reset Endpoint",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Missing Authentication on Database Reset Endpoint",
+    "snippet": ""
+  }
+]

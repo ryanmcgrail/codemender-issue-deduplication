@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "aeeec1b5-3fb3-52fd-9e66-fd5a341fbecf",
+    "session_id": "ChA3ZjBmODRkOWVjYzI3NGYwEAgaATAqBG1haW4",
+    "title": "Prototype Pollution via Malicious CSV Column Headers during Import",
+    "file_path": "/home/jfplante_google_com/repos/p09-react-admin_rep1/packages/ra-no-code/src/ui/useImportResourceFromCsv.tsx",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In the `ra-no-code` package, when a user imports a resource from a CSV file, the CSV's headers are used as keys when parsing and sanitizing the records. \n\n1. **Source**: The application parses the uploaded CSV file using `PapaParse` with headers enabled. The headers of the CSV file are treated as the field names.\n2. **Path**: The headers are extracted as `fields` and iterated in `sanitizeRecords`, which eventually calls `sanitizeRecord` for each field:\n   ```typescript\n   const sanitizeRecord = (records, values, field) =\u003e {\n       if (field.split('.').length \u003e 1) {\n           return records.map(record =\u003e {\n               let { [field]: pathField, ...newRecord } = record;\n               return set(newRecord, field, record[field]);\n           });\n       }\n   ```\n   If a header containing a dot (`.`) is passed, such as `__proto__.polluted`, the function splits the field name and triggers `lodash/set` with the field as the path.\n3. **Sink**: The `set` function is imported from `lodash/set` (version `~4.17.5`). In this version, `lodash` does not protect against prototype pollution when setting values on `__proto__`. \n4. **Impact**: An attacker can supply a CSV file with malicious headers like `__proto__.polluted` and set arbitrary properties on `Object.prototype`. In a React frontend application, this can easily lead to Cross-Site Scripting (XSS) if key rendering/configuration properties are overridden, or client-side Denial of Service.\n\n### Conceptual Exploit Payload:\nCreate a CSV file with the following content:\n```csv\nid,__proto__.polluted\n1,true\n```\nWhen this CSV is uploaded/imported via the `ImportResourceDialog` in `ra-no-code`, `sanitizeRecord` will be called with `field` set to `\"__proto__.polluted\"`.\nThis results in:\n`set(newRecord, \"__proto__.polluted\", \"true\")`\nWhich pollutes the global `Object.prototype`, so that `({}).polluted` will return `\"true\"`.",
+    "snippet": "const sanitizeRecord = (records, values, field) =\u003e {\n    if (field.split('.').length \u003e 1) {\n        return records.map(record =\u003e {\n            let { [field]: pathField, ...newRecord } = record;\n            return set(newRecord, field, record[field]);\n        });\n    }",
+    "vuln_type": "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution')",
+    "vuln_id": "CWE-1321",
+    "status": "OPEN",
+    "start_line": 90,
+    "end_line": 96
+  }
+]

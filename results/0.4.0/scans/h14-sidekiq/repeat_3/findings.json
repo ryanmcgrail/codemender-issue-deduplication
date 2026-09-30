@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "1a1b2447-b8f9-5822-bbc2-12ddb30ff219",
+    "SessionID": "ChAwNzJjZGQ2MDUzZDk2YWZlEAgaATAqBG1haW4",
+    "Title": "HTTP Response Splitting (CRLF Injection) and Header Injection via Referer Query in redirect_with_query",
+    "FilePath": "lib/sidekiq/web/helpers.rb",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "In Sidekiq's Web UI dashboard, the `redirect_with_query` helper method is used when performing actions on queues (e.g., deleting a job in `/queues/:name/delete`), dead jobs, retries, etc.\n\nSpecifically, in `lib/sidekiq/web/helpers.rb`:\n```ruby\n    def redirect_with_query(url)\n      r = request.referer\n      if r \u0026\u0026 r =~ /\\\\?/\n        ref = URI(r)\n        redirect(\\\"#{url}?#{ref.query}\\\")\n      else\n        redirect url\n      end\n    end\n```\n\nThe method reads the HTTP `Referer` header using `request.referer`, parses it with `URI(r)`, and redirects to `\\\"#{url}?#{ref.query}\\\"`.\n\n`request.referer` is entirely user-controlled. If an attacker crafts a malicious `Referer` header with a query string containing a carriage return and line feed (CRLF) injection, or containing open redirect payloads or target-specific manipulation, they can exploit this behavior.\nMore simply, `redirect` in `lib/sidekiq/web/action.rb` is implemented as:\n```ruby\n    def redirect(location)\n      throw :halt, [302, {Web::LOCATION =\u003e \\\"#{request.base_url}#{location}\\\"}, []]\n    end\n```\nHowever, if `location` (which is `\\\"#{url}?#{ref.query}\\\"`) starts with characters that break out of the path, or if we can control `ref.query` to perform an Open Redirect or CRLF injection (HTTP Response Splitting) since the parsed `ref.query` is appended directly to the `Location` header without validation or sanitization, this becomes a vulnerability.\nFor instance, a `Referer` of `http://localhost:3000/sidekiq/queues/default?%0d%0aHeader:Value` could inject headers into the HTTP response if the Rack server or web server does not filter CRLF in headers, or if we can manipulate the path/query parameters to redirect to an external host under certain circumstances.\n\nAdditionally, since `redirect` prepends `request.base_url` (`\\\"#{request.base_url}#{location}\\\"`), an open redirect is harder via `redirect` itself if `request.base_url` is strictly prepended, but any parameter injection in `ref.query` is reflected directly in the `Location` header of the 302 response, leading to Header Injection / CRLF Injection.\n\n**Conceptual Exploit Payload:**\nSend a request to a POST endpoint like `/queues/default/delete` with the following headers:\n```http\nPOST /queues/default/delete HTTP/1.1\nHost: localhost:3000\nReferer: http://localhost:3000/queues/default?%0d%0aSet-Cookie:malicious=1\nContent-Type: application/x-www-form-urlencoded\n...\nkey_val=some_job_key\n```\nThis results in a 302 Redirect with the location:\n`Location: http://localhost:3000/queues/default?%0d%0aSet-Cookie:malicious=1`\nIf the Rack/app server does not strictly validate header values against CRLF, the injected CRLF will split the response, injecting a `Set-Cookie` header or custom HTML response body.",
+    "Snippet": "    def redirect_with_query(url)\n      r = request.referer\n      if r \u0026\u0026 r =~ /\\\\?/\n        ref = URI(r)\n        redirect(\\\"#{url}?#{ref.query}\\\")\n      else\n        redirect url\n      end\n    end",
+    "VulnType": "CWE-113",
+    "VulnID": "CWE-113",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 322,
+    "EndLine": 330,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

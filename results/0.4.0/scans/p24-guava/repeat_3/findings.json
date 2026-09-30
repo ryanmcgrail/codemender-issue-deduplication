@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "14e498fd-79f9-5e27-9acf-a22eac3d77f2",
+    "SessionID": "ChBkMzRmZmJhYTRhYzJlY2M2EAgaATAqBG1haW4",
+    "Title": "Denial of Service via Unbounded Array Allocation in BloomFilter.readFrom()",
+    "FilePath": "guava/src/com/google/common/hash/BloomFilter.java",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability Analysis\n\nA Denial of Service (DoS) vulnerability exists in `com.google.common.hash.BloomFilter.readFrom(InputStream, Funnel)`. The parser reads `dataLength` as a 32-bit signed integer directly from the untrusted binary input stream without validating its size against the remaining bytes in the stream or applying a maximum limit constraint.\n\nImmediately after reading `dataLength`, the method instantiates a `LockFreeBitArray` with the value `LongMath.checkedMultiply(dataLength, 64L)`. The constructor of `LockFreeBitArray` in `BloomFilterStrategies.java` then constructs an `AtomicLongArray` whose size is computed via `Ints.saturatedCast(LongMath.divide(bits, 64, RoundingMode.CEILING))`, which evaluates back to `dataLength` (or `Integer.MAX_VALUE` if it saturated).\n\nAs a result, a tiny serialized payload of only 6 bytes (e.g. specifying `strategyOrdinal`, `numHashFunctions`, and a massive `dataLength` like `100,000,000`) will force the JVM to immediately attempt to allocate a huge array (e.g. 100,000,000 `long` elements requiring ~800 MB of heap, or up to `Integer.MAX_VALUE` elements requiring ~17 GB of heap). Because this allocation happens *before* reading any long elements from the stream, it bypasses the standard protection of throwing an `EOFException`.\n\nThis leads to an immediate `OutOfMemoryError` or severe GC/heap exhaustion, causing a Denial of Service (DoS) to any application parsing user-provided Bloom filters.\n\n### Conceptual Exploit Payload\n\nAn attacker sends a binary payload over a network endpoint that deserializes Bloom filters using `BloomFilter.readFrom`:\n\n```\nByte 0: 0x01 (strategyOrdinal: MURMUR128_MITZ_64)\nByte 1: 0x05 (numHashFunctions: 5)\nBytes 2-5: 0x05 0xF5 0xE1 0x00 (dataLength: 100,000,000 in big-endian 32-bit int)\n```\n\nUpon receipt, the JVM executes:\n```java\ndataLength = din.readInt(); // reads 100,000,000\nnew LockFreeBitArray(LongMath.checkedMultiply(100000000, 64L)); // allocates new AtomicLongArray(100000000)\n```\nThis triggers an `OutOfMemoryError` and crashes the application/service.",
+    "Snippet": "  public static \u003cT extends @Nullable Object\u003e BloomFilter\u003cT\u003e readFrom(\n      InputStream in, Funnel\u003c? super T\u003e funnel) throws IOException {\n    checkNotNull(in, \"InputStream\");\n    checkNotNull(funnel, \"Funnel\");\n    int strategyOrdinal = -1;\n    int numHashFunctions = -1;\n    int dataLength = -1;\n    try {\n      DataInputStream din = new DataInputStream(in);\n      // currently this assumes there is no negative ordinal; will have to be updated if we\n      // add non-stateless strategies (for which we've reserved negative ordinals; see\n      // Strategy.ordinal()).\n      strategyOrdinal = din.readByte();\n      numHashFunctions = UnsignedBytes.toInt(din.readByte());\n      dataLength = din.readInt();\n\n      Strategy strategy = BloomFilterStrategies.values()[strategyOrdinal];\n\n      LockFreeBitArray dataArray = new LockFreeBitArray(LongMath.checkedMultiply(dataLength, 64L));",
+    "VulnType": "Resource Exhaustion",
+    "VulnID": "CWE-400",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 601,
+    "EndLine": 624,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "4a8922bd-f374-5143-a7b6-c406f46853f8",
+    "session_id": "ChBhODY0ZWFhMDY1ZTQzMDAxEAgaATAqBG1haW4",
+    "title": "Denial of Service via Uncontrolled Memory Allocation in Lz4FrameDecoder (CVE-2024-29025)",
+    "file_path": "/home/jfplante_google_com/repos/p23-netty_rep1/codec/src/main/java/io/netty/handler/codec/compression/Lz4FrameDecoder.java",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "An uncontrolled memory allocation vulnerability exists in `Lz4FrameDecoder.java` where memory is allocated based on the `decompressedLength` field specified in the incoming packet header before verifying whether the input stream contains a corresponding volume of data.\n\n### Source\nThe untrusted input enters through the channel buffer read by `Lz4FrameDecoder.decode(ChannelHandlerContext ctx, ByteBuf in, List\u003cObject\u003e out)`.\n\n### Sanitization/Validation\nThe decoder reads `compressedLength` and `decompressedLength` from the header. It checks that `decompressedLength` is less than `maxDecompressedLength` (calculated as `1 \u003c\u003c compressionLevel`, where `compressionLevel` is determined by a token value in the header and can go up to 25, meaning a maximum allowed size of 32MB):\n```java\nint decompressedLength = Integer.reverseBytes(in.readInt());\nfinal int maxDecompressedLength = 1 \u003c\u003c compressionLevel;\nif (decompressedLength \u003c 0 || decompressedLength \u003e maxDecompressedLength) { ... }\n```\nThis validation is insufficient because it permits a `decompressedLength` of up to 32MB without checking whether the physical size of the incoming stream matches or supports such a massive decompressed output.\n\n### Sink\nThe application allocates memory directly based on `decompressedLength`:\n```java\nuncompressed = ctx.alloc().buffer(decompressedLength, decompressedLength);\n```\n\n### Conceptual Exploit Payload\nA malicious client can establish a TCP connection and send a sequence of tiny LZ4 frames. Each frame header is crafted as follows:\n- Magic Number (8 bytes): `MAGIC_NUMBER` (e.g., `0x4c5a34426c6f636bL` or `\"LZ4Block\"`)\n- Token byte (1 byte): `0x0F` (specifying maximum compression level, which sets `maxDecompressedLength` to 32MB)\n- Compressed Length (4 bytes): `20`\n- Decompressed Length (4 bytes): `33554432` (32MB)\n- Checksum (4 bytes): Any valid checksum or custom matching checksum\n\nThe frame payload consists of only 20 dummy bytes of compressed data.\n\nWhen Netty receives this frame, `Lz4FrameDecoder` checks that 20 bytes are readable (`in.readableBytes() \u003c compressedLength`), succeeds, and immediately executes `ctx.alloc().buffer(33554432, 33554432)`. Sending a handful of these 37-byte frames will rapidly exhaust the JVM's direct or heap memory, triggering an `OutOfMemoryError` (OOM) and causing a total Denial of Service (DoS) of the Netty-based server.",
+    "snippet": "                        case BLOCK_TYPE_COMPRESSED:\n                            uncompressed = ctx.alloc().buffer(decompressedLength, decompressedLength);",
+    "vuln_type": "CWE-770: Allocation of Resources Without Limits or Throttling",
+    "vuln_id": "CWE-770",
+    "status": "OPEN",
+    "start_line": 227,
+    "end_line": 228
+  }
+]

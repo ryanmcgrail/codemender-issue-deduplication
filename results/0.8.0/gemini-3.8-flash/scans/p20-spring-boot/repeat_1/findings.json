@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "6721ad75-1692-51d3-ae7a-9d85b8b18f0e",
+    "session_id": "ChBiMzI0NzIxNWY4MjBiNmEyEAgaATAqBG1haW4",
+    "title": "Signature Verification Bypass in Spring Boot Loader via Hardcoded DSA Signature Suffix",
+    "file_path": "/home/jfplante_google_com/repos/p20-spring-boot_rep1/spring-boot-project/spring-boot-tools/spring-boot-loader/src/main/java/org/springframework/boot/loader/zip/ZipContent.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "**Source**: Untrusted or attacker-modified signed JAR archive loaded by the Spring Boot executable application archive or classloader.\n**Sanitization/Validation**: In `ZipContent.java`, the loader attempts to detect if a JAR archive contains signature files in `META-INF/` by comparing the filename suffix against `SIGNATURE_SUFFIX`. However, `SIGNATURE_SUFFIX` is hardcoded to only `\".DSA\"` (line 67). Standard Java signed JAR archives use `.RSA`, `.EC` (ECDSA), and `.SF` signature files. When a JAR signed with RSA or EC is loaded, `centralRecord.fileNameLength() \u003e SIGNATURE_SUFFIX.length \u0026\u0026 ZipString.startsWith(..., META_INF)` matches, but `Arrays.equals(SIGNATURE_SUFFIX, signatureNameSuffixBuffer.array())` evaluates to `false`. Therefore, `hasJarSignatureFile` remains `false`.\n**Sink**: Because `content.hasJarSignatureFile()` returns `false`, `SecurityInfo.get(content)` returns `SecurityInfo.NONE` immediately without invoking `SecurityInfo.load(content)`. Consequently, `JarInputStream` is never used to verify the JAR's digital signatures, and `NestedJarFile.getCertificates()` and `getCodeSigners()` return `null`. Any tamper detection normally performed during class loading from signed JARs is bypassed, allowing tampered or malicious class files in signed JARs to be loaded and executed without throwing `SecurityException`.\n\n**Conceptual Exploit Payload**:\n1. Take a legitimately signed nested JAR library (signed with RSA or ECDSA, containing `META-INF/*.RSA` and `META-INF/*.SF`).\n2. Modify or replace a `.class` file inside the nested JAR with malicious bytecode.\n3. Package the modified nested JAR into the Spring Boot executable archive (under `BOOT-INF/lib/` or `BOOT-INF/classes/`).\n4. When Spring Boot launches (`JarLauncher`), `ZipContent` scans the central directory records. The signature block in `META-INF/` ends with `.RSA` rather than `.DSA`, so `hasJarSignatureFile` is evaluated as `false`.\n5. `SecurityInfo.load(...)` is skipped, signature validation never occurs, and the tampered bytecode executes without restriction.",
+    "snippet": "\t\t\t\tif (!hasJarSignatureFile) {\n\t\t\t\t\tlong filenamePos = pos + ZipCentralDirectoryFileHeaderRecord.FILE_NAME_OFFSET;\n\t\t\t\t\tif (centralRecord.fileNameLength() \u003e SIGNATURE_SUFFIX.length \u0026\u0026 ZipString.startsWith(loader.buffer,\n\t\t\t\t\t\t\tdata, filenamePos, centralRecord.fileNameLength(), META_INF) \u003e= 0) {\n\t\t\t\t\t\tsignatureNameSuffixBuffer.clear();\n\t\t\t\t\t\tdata.readFully(signatureNameSuffixBuffer,\n\t\t\t\t\t\t\t\tfilenamePos + centralRecord.fileNameLength() - SIGNATURE_SUFFIX.length);\n\t\t\t\t\t\thasJarSignatureFile = Arrays.equals(SIGNATURE_SUFFIX, signatureNameSuffixBuffer.array());\n\t\t\t\t\t}\n\t\t\t\t}",
+    "vuln_type": "CWE-347: Improper Verification of Cryptographic Signature",
+    "vuln_id": "CWE-347",
+    "status": "OPEN",
+    "start_line": 609,
+    "end_line": 618
+  }
+]

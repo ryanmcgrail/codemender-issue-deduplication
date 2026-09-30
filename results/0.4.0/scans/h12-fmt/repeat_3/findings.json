@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "c614e1a6-a346-55e1-baab-e81bcf69ff8a",
+    "SessionID": "ChAzNTU3NmMyYjZiZDc5Nzg3EAgaATAqBG1haW4",
+    "Title": "Command Injection in fmt::say via std::system",
+    "FilePath": "/home/jfplante_google_com/repos/h12-fmt_rep3/include/fmt/os.h",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "Conceptual Payload: `\\\"; touch /tmp/pwned; #` as an argument to `fmt::say`.\n\nExplanation:\nThe `fmt::say` function is designed for OS X to execute the `say` command-line utility via `std::system`. However, it constructs the command by simply formatting the arguments directly inside a shell-interpreted string using double quotes: `format(\"say \\\"{}\\\"\", format(format_str, args...))`. There is a complete absence of any sanitization, escaping, or validation of the input arguments.\n\nIf any format argument contains a double quote followed by shell command metacharacters (e.g., `;`, `\u0026\u0026`, `|`), it breaks out of the `say` command's string argument and executes arbitrary commands under the system shell (e.g., `/bin/sh`). For example, passing `\"; command; #` will result in the execution of `say \"\"; command; #\"`, leading to arbitrary command execution.",
+    "Snippet": "#ifdef __OSX__\ntemplate \u003ctypename S, typename... Args, typename Char = char_t\u003cS\u003e\u003e\nvoid say(const S\u0026 format_str, Args\u0026\u0026... args) {\n  std::system(format(\"say \\\"{}\\\"\", format(format_str, args...)).c_str());\n}\n#endif",
+    "VulnType": "CWE-78",
+    "VulnID": "CWE-78",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 181,
+    "EndLine": 186,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

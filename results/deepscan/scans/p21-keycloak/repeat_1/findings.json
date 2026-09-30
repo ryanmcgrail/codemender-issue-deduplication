@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "06729258-21e0-59fd-a633-92f750f62ad1",
+    "session_id": "ChA1ZDI5MmU5Mjk4YTkxNjliEAgaATAqBG1haW4",
+    "title": "Open Redirect via KC_REDIRECT Cookie in KeycloakAuthenticationSuccessHandler",
+    "file_path": "/home/jfplante_google_com/repos/p21-keycloak_rep1/adapters/oidc/spring-security/src/main/java/org/keycloak/adapters/springsecurity/authentication/KeycloakAuthenticationSuccessHandler.java",
+    "severity": "MEDIUM",
+    "confidence": 100,
+    "analysis": "Data path trace:\n- Source: Untrusted user input enters through the HTTP request cookie `KC_REDIRECT` retrieved via `KeycloakCookieBasedRedirect.getRedirectUrlFromCookie(request)` at line 52. Furthermore, in `KeycloakAuthenticationEntryPoint.commenceLoginRedirect`, the unauthenticated request URI (`request.getRequestURI()`) is stored directly into the `KC_REDIRECT` cookie without validation.\n- Sanitization/Validation: There is no validation, URL parsing, or domain allowlisting performed on `location`. Any arbitrary URL (including external URLs or protocol-relative URLs like `//attacker.com`) is accepted as-is.\n- Sink: `response.sendRedirect(location)` at line 60.\n\nConceptual Exploit Payload:\n1. An attacker tricks an unauthenticated user into clicking a link to the application:\n   `https://victim-app.example.com//attacker.example.com/login`\n2. `KeycloakAuthenticationEntryPoint` stores the request URI `//attacker.example.com/login` into the `KC_REDIRECT` cookie and redirects the user to Keycloak for authentication.\n3. After the user successfully authenticates, Keycloak redirects back to `victim-app.example.com`.\n4. `KeycloakAuthenticationSuccessHandler.onAuthenticationSuccess` reads `KC_REDIRECT` (`//attacker.example.com/login`) and executes `response.sendRedirect(\"//attacker.example.com/login\")`.\n5. The user's browser is immediately redirected to `https://attacker.example.com/login`, enabling phishing or credential theft.\nAlternatively, an attacker can directly set the cookie in a request:\n```http\nGET /login/oauth2/code/keycloak?state=...\u0026code=... HTTP/1.1\nHost: victim-app.example.com\nCookie: KC_REDIRECT=https://attacker.example.com/phish\n```\nThe handler directly redirects the victim to `https://attacker.example.com/phish`.",
+    "snippet": "                response.sendRedirect(location);",
+    "vuln_type": "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')",
+    "vuln_id": "CWE-601",
+    "status": "OPEN",
+    "start_line": 60,
+    "end_line": 60
+  }
+]

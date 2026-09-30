@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "dba3e485-eb92-5b03-a68e-e596dc1314f3",
+    "SessionID": "ChBiZmUwMzUwNjZkZGE2ZmQ1EAgaATAqBG1haW4",
+    "Title": "Permissive CORS Configuration allows Origin reflection and Cross-Origin Resource Sharing Bypass",
+    "FilePath": "util/httputil/cors.go",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "In `util/httputil/cors.go`, the CORS validation function `SetCORS` relies on the `CORSOrigin` regular expression passed from configuration. However, if `o.String() == \\\"^(?:.*)$\\\"` or another wildcard expression matches the `Origin` header from untrusted HTTP requests, the response header `Access-Control-Allow-Origin` is dynamically set to the user-supplied `Origin` value. When an application supports credentials or other sensitive information and returns arbitrary origins reflected from the request header, it opens up the application to Cross-Origin Resource Sharing (CORS) bypass vulnerabilities. Furthermore, because regex validation uses a fully user-defined regex or defaults to permissive patterns, an attacker can supply malicious or crafted origins that pass the regex validation (e.g., if the user configures a regex with an unescaped dot like `example.com` or missing anchors, which matches `example-com.attacker.com`). This enables malicious sites to execute unauthorized API requests (such as querying sensitive Prometheus TSDB data, rules, configurations, or admin endpoints like `/admin/tsdb/delete_series` or `//-/reload` if enabled) and read the responses on behalf of the victim user.\n\nConceptual Exploit Payload:\n1. Send an HTTP request containing a malicious origin matching a loose or misconfigured CORS regex:\n   ```http\n   GET /api/v1/query?query=up HTTP/1.1\n   Host: target-prometheus:9090\n   Origin: http://example-com.attacker.com\n   Accept: application/json\n   ```\n2. The server processes the `Origin` header against the regular expression (e.g. `example.com` with unescaped dot), matches it, and reflects it back:\n   ```http\n   HTTP/1.1 200 OK\n   Access-Control-Allow-Origin: http://example-com.attacker.com\n   Access-Control-Allow-Credentials: true\n   ...\n   ```\n3. The attacker's script on `http://example-com.attacker.com` can now successfully read the sensitive query results or trigger TSDB admin actions.",
+    "Snippet": "func SetCORS(w http.ResponseWriter, o *regexp.Regexp, r *http.Request) {\n\torigin := r.Header.Get(\"Origin\")\n\tif origin == \"\" {\n\t\treturn\n\t}\n\n\tfor k, v := range corsHeaders {\n\t\tw.Header().Set(k, v)\n\t}\n\n\tif o.String() == \"^(?:.*)$\" {\n\t\tw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\n\t\treturn\n\t}\n\n\tif o.MatchString(origin) {\n\t\tw.Header().Set(\"Access-Control-Allow-Origin\", origin)\n\t}\n}",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-346",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 30,
+    "EndLine": 48,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "63401e1c-c487-54b9-a857-e7cd4633ff26",
+    "session_id": "ChA4NTk5ODYyMTExMTg2MTRjEAgaATAqBG1haW4",
+    "title": "InfluxQL Injection via Incomplete Backslash Escaping in Label Matchers",
+    "file_path": "/home/jfplante_google_com/repos/p15-prometheus_rep1/documentation/examples/remote_storage/remote_storage_adapter/influxdb/client.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Vulnerability Description\nAn InfluxQL Injection (SQL Injection) vulnerability exists in the InfluxDB remote storage adapter client. When handling `/read` requests, the adapter dynamically constructs InfluxQL queries by concatenating user-controlled label matcher names, values, and timestamps into the query string without parameterized queries or proper escaping of escape characters (backslashes).\n\n### Data Flow Analysis\n- **Source**: Untrusted HTTP POST request to `/read` (`documentation/examples/remote_storage/remote_storage_adapter/main.go:238`), which decodes a snappy-compressed `prompb.ReadRequest` protobuf containing `prompb.Query` and `prompb.LabelMatcher` entries.\n- **Sanitization/Validation**: In `buildCommand` (`influxdb/client.go:148-184`), the code attempts sanitization using `escapeSingleQuotes(m.Value)` (lines 186-188) and `escapeSlashes(m.Value)` (lines 190-192). `escapeSingleQuotes` only replaces `'` with `\\'`. However, it does NOT escape backslashes (`\\`). Similarly, `escapeSlashes` only replaces `/` with `\\/` without escaping existing backslashes. If an input contains a backslash immediately preceding a quote (or regex slash), the backslash escapes the closing delimiter, breaking out of the string literal or regex literal and allowing execution of arbitrary InfluxQL commands.\n- **Sink**: `c.client.Query(query)` at `documentation/examples/remote_storage/remote_storage_adapter/influxdb/client.go:124`.\n\n### Conceptual Exploit Payload\nAn unauthenticated attacker sends a snappy-compressed protobuf `ReadRequest` to `POST /read` with a query containing two label matchers:\n1. Matcher 1: `Type: LabelMatcher_EQ`, `Name: \"tag1\"`, `Value: \"\\\\\"` (a single backslash)\n2. Matcher 2: `Type: LabelMatcher_EQ`, `Name: \"tag2\"`, `Value: \" OR 1=1; DROP DATABASE metrics; -- \"`\n\n`buildCommand` formats Matcher 1 as `\"tag1\" = '\\'` and Matcher 2 as `\"tag2\" = ' OR 1=1; DROP DATABASE metrics; -- '`.\nJoined together, the WHERE clause becomes:\n`WHERE \"tag1\" = '\\' AND \"tag2\" = ' OR 1=1; DROP DATABASE metrics; -- ' AND time \u003e= ...`\n\nIn InfluxQL, `\\'` escapes the single quote after `tag1`, causing the string literal to continue until the single quote preceding ` OR 1=1`. Consequently, the injected payload `; DROP DATABASE metrics; --` is parsed and executed as an independent InfluxQL statement outside of any string literal.",
+    "snippet": "\t\tquery := influx.NewQuery(command, c.database, \"ms\")\n\t\tresp, err := c.client.Query(query)",
+    "vuln_type": "CWE-89",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 123,
+    "end_line": 124
+  }
+]

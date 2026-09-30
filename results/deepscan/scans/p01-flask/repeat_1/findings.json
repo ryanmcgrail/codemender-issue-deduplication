@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "ee546c87-f115-5712-b903-a95277403b85",
+    "session_id": "ChBlMzQ4NTQyZDc4ZTlmM2EwEAgaATAqBG1haW4",
+    "title": "Use of Weak Hash Algorithm SHA-1 for Session Cookie Signing",
+    "file_path": "/home/jfplante_google_com/repos/p01-flask_rep1/src/flask/sessions.py",
+    "severity": "MEDIUM",
+    "confidence": 85,
+    "analysis": "In `src/flask/sessions.py`, `SecureCookieSessionInterface` defines default session cookie signing using `digest_method = staticmethod(_lazy_sha1)`. The function `_lazy_sha1` calls `hashlib.sha1(string)` at line 285.\n\n- Source: `SecureCookieSessionInterface.get_signing_serializer` creates an `itsdangerous.URLSafeTimedSerializer` with `digest_method=self.digest_method`.\n- Sanitization/Validation: None. SHA-1 is selected by default for signing session cookies unless manually overridden.\n- Sink: `hashlib.sha1(string)` in `_lazy_sha1` at `src/flask/sessions.py:285`.\n- Reachability: Whenever sessions are dumped (`save_session`) or loaded (`open_session`), HMAC-SHA1 is executed via `_lazy_sha1`.\n- Vulnerability: SHA-1 is a cryptographically weak hashing algorithm vulnerable to collision attacks and disallowed by modern security and compliance standards (such as NIST SP 800-131A and FIPS 140-2/3). Using SHA-1 in a security context (session token authentication and integrity) weakens the cryptographic posture of session management.\n\nConceptual Exploit Payload:\nA client sends an HTTP request:\n```http\nGET / HTTP/1.1\nHost: example.com\nCookie: session=\u003csession_payload\u003e.\u003ctimestamp\u003e.\u003chmac_sha1_signature\u003e\n```\nThe application validates the session using HMAC with SHA-1 as the underlying digest algorithm. In environments with strict cryptographic policies (e.g. FIPS-compliant systems), the use of SHA-1 causes runtime execution errors or compliance failure. In environments where collision attacks or key-recovery attacks apply, the integrity of the session mechanism is degraded compared to modern algorithms such as SHA-256.",
+    "snippet": "    return hashlib.sha1(string)",
+    "vuln_type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+    "vuln_id": "CWE-327",
+    "status": "OPEN",
+    "start_line": 285,
+    "end_line": 285
+  },
+  {
+    "finding_id": "c16873b9-ca2c-56ed-bef9-3ddcfb2ae267",
+    "session_id": "ChBlMzQ4NTQyZDc4ZTlmM2EwEAgaATAqBG1haW4",
+    "title": "Session Cookie Transmitted Without Secure Flag by Default",
+    "file_path": "/home/jfplante_google_com/repos/p01-flask_rep1/src/flask/sessions.py",
+    "severity": "MEDIUM",
+    "confidence": 85,
+    "analysis": "In `src/flask/sessions.py`, `SecureCookieSessionInterface.save_session` transmits session cookies via `response.set_cookie` at lines 369-378.\n\n- Source: Session data generated for the client during request handling.\n- Sanitization/Validation: None; the `secure` flag passed to `response.set_cookie` is retrieved from `self.get_cookie_secure(app)`, which directly returns `app.config[\"SESSION_COOKIE_SECURE\"]`. In `src/flask/app.py:190`, `SESSION_COOKIE_SECURE` defaults to `False`. The implementation does not enforce the `Secure` flag or dynamically check if the current request is over HTTPS (`request.is_secure`).\n- Sink: `response.set_cookie(...)` in `SecureCookieSessionInterface.save_session` at `src/flask/sessions.py:369-378`.\n- Reachability: Every time a session cookie is issued or refreshed in an application relying on default settings, the cookie is set without the `Secure` attribute.\n- Vulnerability: Under CWE-614, transmitting sensitive session cookies without the `Secure` attribute allows the cookie to be transmitted over cleartext HTTP connections. An attacker on the local network (e.g. coffee shop Wi-Fi or compromised router) can sniff unencrypted HTTP traffic to capture the session cookie and hijack user sessions.\n\nConceptual Exploit Payload:\n1. User logs in over HTTPS:\n```http\nPOST /login HTTP/1.1\nHost: example.com\n```\n2. The server responds setting the session cookie without the `Secure` attribute:\n```http\nHTTP/1.1 200 OK\nSet-Cookie: session=eyJ...; HttpOnly; Path=/\n```\n3. A network attacker induces or waits for the user's browser to make any plaintext HTTP request to the domain (e.g. via an insecure resource link `\u003cimg src=\"http://example.com/logo.png\"\u003e` or direct navigation):\n```http\nGET /logo.png HTTP/1.1\nHost: example.com\nCookie: session=eyJ...\n```\n4. The browser transmits the unencrypted session cookie over HTTP, allowing the attacker to intercept the token and impersonate the user.",
+    "snippet": "        response.set_cookie(\n            name,\n            val,  # type: ignore\n            expires=expires,\n            httponly=httponly,\n            domain=domain,\n            path=path,\n            secure=secure,\n            samesite=samesite,\n        )",
+    "vuln_type": "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute",
+    "vuln_id": "CWE-614",
+    "status": "OPEN",
+    "start_line": 369,
+    "end_line": 378
+  }
+]

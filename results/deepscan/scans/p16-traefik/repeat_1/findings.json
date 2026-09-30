@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "3c1ebc93-fe02-57c6-9a56-a60a7fd14f68",
+    "session_id": "ChA2NGZhNjQ1YjljZWVlYmJjEAgaATAqBG1haW4",
+    "title": "Zip Slip Path Traversal in unzipFile in Plugin Archive Extraction",
+    "file_path": "/home/jfplante_google_com/repos/p16-traefik_rep1/pkg/plugins/client.go",
+    "severity": "HIGH",
+    "confidence": 85,
+    "analysis": "In `pkg/plugins/client.go`, the function `unzipFile` (invoked by `unzipArchive` when `c.unzipModule` fails) is vulnerable to Zip Slip directory traversal (CWE-22). \n\nData Path Trace:\n- **Source**: Untrusted zip archive file entries `f.Name` and payload `rc` extracted from a plugin archive downloaded from the plugin registry.\n- **Sanitization/Validation**: The function splits `f.Name` by `/` via `strings.SplitN(f.Name, \"/\", 2)` and takes the second element `pp`, then computes `p := filepath.Join(dest, pp)`. However, there is no validation (e.g. checking `strings.HasPrefix(filepath.Clean(p), filepath.Clean(dest) + string(filepath.Separator))` or relative path containment) to verify that the extracted target path does not escape the destination directory `dest`.\n- **Sink**: `os.MkdirAll(filepath.Dir(p), 0o750)` and `os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())`, followed by `io.Copy(elt, rc)`.\n\nConceptual Exploit Payload:\nA plugin archive containing a zip entry named `prefix/../../../../../../tmp/evil.txt` (or `/etc/cron.d/malicious`). When processed by `unzipFile`, `pathParts` splits to `[\"prefix\", \"../../../../../../tmp/evil.txt\"]`. `filepath.Join(dest, pp)` resolves relative to the filesystem root, bypassing `dest` and writing arbitrary contents to `/tmp/evil.txt` with permissions defined by `f.Mode()`.",
+    "snippet": "\tpathParts := strings.SplitN(f.Name, \"/\", 2)\n\n\tvar pp string\n\tif len(pathParts) \u003c 2 {\n\t\tpp = pathParts[0]\n\t} else {\n\t\tpp = pathParts[1]\n\t}\n\n\tp := filepath.Join(dest, pp)\n\n\tif f.FileInfo().IsDir() {\n\t\terr = os.MkdirAll(p, f.Mode())\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"unable to create archive directory %s: %w\", p, err)\n\t\t}\n\n\t\treturn nil\n\t}\n\n\terr = os.MkdirAll(filepath.Dir(p), 0o750)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"unable to create archive directory %s for file %s: %w\", filepath.Dir(p), p, err)\n\t}\n\n\telt, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())\n\tif err != nil {\n\t\treturn err\n\t}\n\n\tdefer func() { _ = elt.Close() }()\n\n\t_, err = io.Copy(elt, rc)\n\tif err != nil {\n\t\treturn err\n\t}",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 281,
+    "end_line": 318
+  },
+  {
+    "finding_id": "93cb148c-971e-51c4-8fe0-ab6b84290774",
+    "session_id": "ChA2YjU1MWYzZTY5NTRiM2Q3EAgaATAqBG1haW4",
+    "title": "Use of Broken Cryptographic Hash (SHA-1) for Password Storage in Basic Authentication",
+    "file_path": "/home/jfplante_google_com/repos/p16-traefik_rep1/pkg/provider/kubernetes/crd/kubernetes.go",
+    "severity": "MEDIUM",
+    "confidence": 90,
+    "analysis": "In `pkg/provider/kubernetes/crd/kubernetes.go`, the function `loadBasicAuthCredentials` extracts the `username` and `password` from a Kubernetes `corev1.Secret` of type `kubernetes.io/basic-auth`. When constructing dynamic configuration credentials for the BasicAuth middleware, it hashes the user password using unsalted SHA-1 via `sha1.New()` and encodes it in htpasswd format as `{SHA}\u003cbase64(sha1(password))\u003e`.\n\nUsing unsalted SHA-1 for password hashing is insecure (CWE-327). SHA-1 is a cryptographically weak and obsolete hashing algorithm that is vulnerable to collision attacks and is computationally cheap, making the resulting password hashes highly susceptible to offline brute-force, dictionary, and rainbow table attacks. Modern, slow, salted hashing schemes such as bcrypt, Argon2, or PBKDF2 should be used for password hashing in security authentication contexts.\n\nConceptual Exploit Scenario:\nAn attacker who obtains read access to the generated Traefik configuration (e.g., via Traefik API/dashboard, debug logs, memory dumps, or configuration backups) can easily reverse or crack the unsalted `{SHA}` password hashes using precomputed rainbow tables or GPU-based password cracking tools (like Hashcat) to recover the cleartext basic authentication credentials.",
+    "snippet": "\thash := sha1.New()\n\thash.Write(password)\n\tpasswordSum := base64.StdEncoding.EncodeToString(hash.Sum(nil))\n\n\treturn []string{fmt.Sprintf(\"%s:{SHA}%s\", username, passwordSum)}, nil",
+    "vuln_type": "Cryptographic Weakness",
+    "vuln_id": "CWE-327",
+    "status": "OPEN",
+    "start_line": 921,
+    "end_line": 926
+  }
+]

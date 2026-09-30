@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "e102b8b9-4dbe-571c-abca-b2cb695cb206",
+    "SessionID": "ChA1YWZkMGQ1ZTBlMmZkZGVhEAgaATAqBG1haW4",
+    "Title": "CORS Origin Regex Substring Match Validation Bypass",
+    "FilePath": "pkg/middlewares/headers/header.go",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "A CORS bypass vulnerability exists in `pkg/middlewares/headers/header.go` because the regular expression validation of the `AccessControlAllowOriginListRegex` list of allowable origins does not enforce strict matching of the entire string (e.g. using `^` and `$`). Specifically, in `isOriginAllowed()`, the check:\n```go\nfor _, regex := range s.allowOriginRegexes {\n    if regex.MatchString(origin) {\n        return true, origin\n    }\n}\n```\nuses `regexp.MatchString`, which allows substring matching if the configuration regex itself is missing strict anchors (`^`/`$`). For instance, if the configuration specifies the pattern `([a-z]+)\\.bar`, a malicious request with the `Origin` header `http://evil.com/some-subpath?arbitrary=something.bar` or `http://attacker-bar.com` would match the regular expression and be allowed, leading to CORS origin validation bypass and CORS exploitation.\n\nConceptual Exploit Payload:\n1. Dynamic Headers configuration includes:\n```yaml\nhttp:\n  middlewares:\n    my-headers:\n      headers:\n        accessControlAllowOriginListRegex:\n          - \"([a-z]+)\\\\.bar\"\n```\n2. Attacker sends the following HTTP request:\n```http\nGET /api/resource HTTP/1.1\nHost: vulnerable-app.local\nOrigin: http://evil-bar.com\n```\n3. The server validates `http://evil-bar.com` against `([a-z]+)\\.bar` using `MatchString()`, which succeeds, and responds with:\n```http\nHTTP/1.1 200 OK\nAccess-Control-Allow-Origin: http://evil-bar.com\nAccess-Control-Allow-Credentials: true\n```",
+    "Snippet": "func (s *Header) isOriginAllowed(origin string) (bool, string) {\n\tfor _, item := range s.headers.AccessControlAllowOriginList {\n\t\tif item == \"*\" || item == origin {\n\t\t\treturn true, item\n\t\t}\n\t}\n\n\tfor _, regex := range s.allowOriginRegexes {\n\t\tif regex.MatchString(origin) {\n\t\t\treturn true, origin\n\t\t}\n\t}\n\n\treturn false, \"\"\n}",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-625",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 177,
+    "EndLine": 191,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

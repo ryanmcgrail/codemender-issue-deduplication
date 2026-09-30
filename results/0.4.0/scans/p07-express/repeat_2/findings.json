@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "1384e0f6-7115-597a-b166-fa11a256d962",
+    "SessionID": "ChBhNmY0NWNmZjYwOTUzOWJiEAgaATAqBG1haW4",
+    "Title": "Prototype Pollution in Query Parser middleware via qs allowPrototypes configuration",
+    "FilePath": "lib/middleware/query.js",
+    "Severity": "HIGH",
+    "Confidence": 95,
+    "Analysis": "In Express, query parameters are parsed by default using the `qs` library with `allowPrototypes: true` configured in `lib/middleware/query.js`. This is explicitly set as:\n```javascript\n  if (opts !== undefined \u0026\u0026 opts.allowPrototypes === undefined) {\n    // back-compat for qs module\n    opts.allowPrototypes = true;\n  }\n```\nBecause `allowPrototypes` is set to `true`, `qs` parses keys that can overwrite/add properties directly onto `Object.prototype`, leading to prototype pollution when parsing nested query parameters. An untrusted user can send query parameters like `?__proto__[polluted]=pollutedVal` to inject properties onto `Object.prototype`. These properties are then inherited by all JavaScript objects, allowing for logic bypasses, denial of service, or potentially remote code execution depending on how properties are used downstream in application logic.\n\n**Conceptual Exploit Payload:**\nAn attacker sends the following HTTP request to the Express application:\n```http\nGET /?__proto__[polluted]=true HTTP/1.1\nHost: localhost:3000\n```\nUpon parsing this request:\n1. `lib/middleware/query.js` reads the query parameters via `parseUrl(req).query` which yields `\"__proto__[polluted]=true\"`.\n2. It calls `qs.parse(val, opts)` where `opts.allowPrototypes` is `true`.\n3. Because `allowPrototypes` is enabled, the parsed object directly pollutes `Object.prototype` with `polluted: \"true\"`.\n4. Any object created subsequently (e.g. `{}`) will have `({}).polluted === \"true\"`.\n",
+    "Snippet": "module.exports = function query(options) {\n  var opts = merge({}, options)\n  var queryparse = qs.parse;\n\n  if (typeof options === 'function') {\n    queryparse = options;\n    opts = undefined;\n  }\n\n  if (opts !== undefined \u0026\u0026 opts.allowPrototypes === undefined) {\n    // back-compat for qs module\n    opts.allowPrototypes = true;\n  }\n\n  return function query(req, res, next){\n    if (!req.query) {\n      var val = parseUrl(req).query;\n      req.query = queryparse(val, opts);\n    }\n\n    next();\n  };\n};",
+    "VulnType": "Injection",
+    "VulnID": "CWE-1321",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 25,
+    "EndLine": 46,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

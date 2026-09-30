@@ -1,0 +1,86 @@
+[
+  {
+    "finding_id": "1183c0b8",
+    "severity": "CRITICAL",
+    "vuln_type": "Code Injection",
+    "file_path": "app/routes/contributions.js",
+    "title": "Server-Side JavaScript Injection / Remote Code Execution via eval()",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side JavaScript Injection / Remote Code Execution via eval()",
+    "snippet": ""
+  },
+  {
+    "finding_id": "76b50c88",
+    "severity": "HIGH",
+    "vuln_type": "Injection",
+    "file_path": "app/data/allocations-dao.js",
+    "title": "NoSQL / Server-Side JavaScript Injection via MongoDB $where Clause",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "NoSQL / Server-Side JavaScript Injection via MongoDB $where Clause",
+    "snippet": ""
+  },
+  {
+    "finding_id": "474f2800",
+    "severity": "HIGH",
+    "vuln_type": "SSRF",
+    "file_path": "app/routes/research.js",
+    "title": "Server-Side Request Forgery (SSRF) in Research Handler",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side Request Forgery (SSRF) in Research Handler",
+    "snippet": ""
+  },
+  {
+    "finding_id": "cc8fe8c0",
+    "severity": "MEDIUM",
+    "vuln_type": "Open Redirect",
+    "file_path": "app/routes/index.js",
+    "title": "Open URL Redirection in Learn Route",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Open URL Redirection in Learn Route",
+    "snippet": ""
+  },
+  {
+    "finding_id": "8729faa0",
+    "severity": "HIGH",
+    "vuln_type": "Missing Authorization",
+    "file_path": "app/routes/index.js",
+    "title": "Missing Function-Level Access Control on Benefits Administration Endpoints",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Missing Function-Level Access Control on Benefits Administration Endpoints",
+    "snippet": ""
+  },
+  {
+    "finding_id": "fcc9aecf",
+    "severity": "MEDIUM",
+    "vuln_type": "Authorization Bypass Through User-Controlled Key",
+    "file_path": "app/routes/allocations.js",
+    "title": "Insecure Direct Object Reference (IDOR) on Allocations Endpoint",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Insecure Direct Object Reference (IDOR) on Allocations Endpoint",
+    "snippet": ""
+  },
+  {
+    "finding_id": "8a882497",
+    "severity": "MEDIUM",
+    "vuln_type": "Inefficient Regular Expression Complexity",
+    "file_path": "app/routes/profile.js",
+    "title": "Regular Expression Denial of Service (ReDoS) in Profile Bank Routing Validation",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Regular Expression Denial of Service (ReDoS) in Profile Bank Routing Validation",
+    "snippet": ""
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "de4cf85a",
+    "severity": "HIGH",
+    "vuln_type": "HTTP Request/Response Smuggling / Cache Poisoning",
+    "file_path": "src/Middleware/ResponseCaching/src/ResponseCachingKeyProvider.cs",
+    "title": "Cache Key Delimiter Injection in ResponseCachingKeyProvider Leading to Cache Poisoning",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Cache Key Delimiter Injection in ResponseCachingKeyProvider Leading to Cache Poisoning",
+    "snippet": ""
+  }
+]

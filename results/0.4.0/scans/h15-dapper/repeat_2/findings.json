@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "b92a412f-44f0-5d2f-84f8-169fb5079a0e",
+    "SessionID": "ChBlNTA3ZGZmZmM4Y2U2ZTRjEAgaATAqBG1haW4",
+    "Title": "XML External Entity (XXE) Injection in XmlDocumentHandler",
+    "FilePath": "/home/jfplante_google_com/repos/h15-dapper_rep2/Dapper/XmlHandlers.cs",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `XmlDocumentHandler.Parse` method parses an XML string into an `XmlDocument` object using `doc.LoadXml(xml)` without restricting or disabling external entity resolution (XXE). In modern .NET versions, `XmlDocument` has safer defaults, but in older versions of .NET Framework (like `.NET Framework 4.6.1` which this library targets as a target framework `\u003cTargetFrameworks\u003enet461;...`), `XmlDocument` parses DTDs and resolves external entities by default. This makes applications using Dapper to parse XML columns vulnerable to XML External Entity (XXE) injection if the database content is untrusted or influenced by external attackers.\n\nTo resolve this safely, an `XmlReader` with `XmlReaderSettings` disabling DTD parsing (`DtdProcessing = DtdProcessing.Prohibit` or `Ignore`) should be used to load the XML document.\n\n### Conceptual Exploit Payload\n\nAn attacker stores the following payload in an XML column of a table:\n```xml\n\u003c?xml version=\"1.0\" encoding=\"ISO-8859-1\"?\u003e\n\u003c!DOCTYPE foo [  \n  \u003c!ELEMENT foo ANY \u003e\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\" \u003e]\u003e\n\u003cfoo\u003e\u0026xxe;\u003c/foo\u003e\n```\nWhen Dapper retrieves this column and maps it to an `XmlDocument` property of a model class, `XmlDocumentHandler.Parse` is called, leading to the loading and evaluation of the external entity, disclosing local file contents to the application memory or executing server-side requests (SSRF).",
+    "Snippet": "        protected override XmlDocument Parse(string xml)\n        {\n            var doc = new XmlDocument();\n            doc.LoadXml(xml);\n            return doc;\n        }",
+    "VulnType": "CWE-611",
+    "VulnID": "CWE-611",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 18,
+    "EndLine": 23,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

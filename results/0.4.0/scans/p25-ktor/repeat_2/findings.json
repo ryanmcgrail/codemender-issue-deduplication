@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "13266757-4315-58f9-a45b-4a1ca8449d8a",
+    "SessionID": "ChAxNzE1NmI1Y2RlN2Y4Y2UxEAgaATAqBG1haW4",
+    "Title": "Cryptographic Padding Oracle in Ktor Session Encryption (SessionTransportTransformerEncrypt)",
+    "FilePath": "ktor-server/ktor-server-plugins/ktor-server-sessions/jvm/src/io/ktor/server/sessions/SessionTransportTransformerEncrypt.kt",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability: Cryptographic Padding Oracle in SessionTransportTransformerEncrypt\n\n#### 1. Source\nAn untrusted client provides an encrypted session cookie via a `Cookie` header (e.g., `Cookie: SESSION=\u003chex(iv)\u003e/\u003chex(encrypted)\u003e:\u003chex(mac)\u003e`).\n\n#### 2. Sanitization/Validation\nThe `SessionTransportTransformerEncrypt.transformRead` method is called to read the cookie value. The validation is insufficient because:\n* The Message Authentication Code (MAC) is computed and verified on the **decrypted plaintext** (`hex(mac(decrypted))`) instead of the **ciphertext**.\n* The ciphertext is decrypted (`decrypt(iv, encrypted)`) using AES in CBC mode with PKCS5 padding (`AES/CBC/PKCS5PADDING`) **before** any integrity check (MAC verification) has occurred.\n* Although any decryption errors (such as `BadPaddingException`) are caught in a generic `catch (e: Throwable)` block and return `null`, this decryption-before-MAC pattern introduces a standard cryptographic Padding Oracle vulnerability (CWE-2013/CWE-327).\n\n#### 3. Sink\nThe dangerous cryptographic operation is `Cipher.doFinal(input)` inside `encryptDecrypt` called by `decrypt(iv, encrypted)` on line 105:\n```kotlin\n    private fun decrypt(initVector: ByteArray, encrypted: ByteArray): ByteArray {\n        return encryptDecrypt(Cipher.DECRYPT_MODE, initVector, encrypted)\n    }\n```\n\n#### 4. Conceptual Exploit Payload\nAn attacker can systematically exploit this padding oracle by sending modified session cookies to the server. By observing side-channels (such as subtle response timing differences when decryption throws a `BadPaddingException` early on line 113 vs when decryption completes successfully and executes the relatively slow `mac(decrypted)` operation on line 116), the attacker can decrypt any session cookie byte-by-byte or forge custom session cookies.\n\n**Conceptual Request:**\n```http\nGET /some-endpoint HTTP/1.1\nHost: vulnerable-server.com\nCookie: SESSION=0102030405060708090a0b0c0d0e0f10/88888888888888888888888888888888:99999999999999999999999999999999\n```\nBy altering the last bytes of the ciphertext and measuring the server's execution/response time, the attacker successfully executes the padding oracle decryption.",
+    "Snippet": "    override fun transformRead(transportValue: String): String? {\n        try {\n            val encryptedMac = transportValue.substringAfterLast('/', \"\")\n            val iv = hex(transportValue.substringBeforeLast('/'))\n            val encrypted = hex(encryptedMac.substringBeforeLast(':'))\n            val macHex = encryptedMac.substringAfterLast(':', \"\")\n            val decrypted = decrypt(iv, encrypted)\n\n            if (hex(mac(decrypted)) != macHex) {\n                return null\n            }\n\n            return decrypted.toString(charset)\n        } catch (e: Throwable) {\n            // NumberFormatException // Invalid hex\n            // InvalidAlgorithmParameterException // Invalid data\n            if (log.isDebugEnabled) {\n                log.debug(e.toString())\n            }\n            return null\n        }\n    }",
+    "VulnType": "CWE-327",
+    "VulnID": "CVE-2023-30534",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 70,
+    "EndLine": 91,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "dd0686a5",
+    "severity": "HIGH",
+    "vuln_type": "CWE-400",
+    "file_path": "codec-dns/src/main/java/io/netty/handler/codec/dns/DnsCodecUtil.java",
+    "title": "DNS Compression Pointer Loop Causing CPU and Memory Exhaustion (DoS) in DnsCodecUtil",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "DNS Compression Pointer Loop Causing CPU and Memory Exhaustion (DoS) in DnsCodecUtil",
+    "snippet": ""
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "5f115ffe-692b-5baa-91d4-783ec01dc760",
+    "SessionID": "ChA1OGQ1NzZkZjMwOGQzMzY5EAgaATAqBG1haW4",
+    "Title": "HTML Comment Breakout / Cross-Site Scripting (XSS) in Server-Side Rendering (SSR) via escapeHtmlComment",
+    "FilePath": "packages/shared/src/escapeHtml.ts",
+    "Severity": "HIGH",
+    "Confidence": 80,
+    "Analysis": "In `@vue/server-renderer`, rendering of comments via standard `\u003ctemplate\u003e` comments (e.g. `\u003cdiv v-if=\\\"...\\\"\u003e\u003c!-- comment --\u003e\u003c/div\u003e`) uses the `escapeHtmlComment` sanitizer function. However, the regex used in `escapeHtmlComment` is `/^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$/g`.\nIf a malicious user-provided string is rendered inside a comment (for example, in a dynamically rendered comment in custom render functions or if comments are enabled and dynamically interpolated via server-side rendering logic), a payload containing `--\u003e` nested or structured in specific ways, or utilizing characters not caught by the strip regex, can break out of the HTML comment block and execute cross-site scripting (XSS).\nSpecifically, `commentStripRE` is `^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$` with `/g`. It matches only exact occurrences of these comment tokens. If a string is `-- \u003e` or similar, or if there is nested comment formatting, or if it doesn't match the exact anchors (for instance, if we input `--!\u003e` in the middle of a string that does not start with `-?\u003e`), it may not be completely sanitized depending on browser parsing.\nFor example, if the input is `--\u003e \u003cscript\u003ealert(1)\u003c/script\u003e \u003c!--`, the first `--\u003e` is replaced, but the end of the comment isn't properly handled or if we use alternative closing markers, we can break out of the comment context. Specifically, `escapeHtmlComment` does not perform full HTML escaping (e.g., `\u003c` and `\u003e` are not converted to `\u0026lt;` and `\u0026gt;`). Thus, if the replacement regex can be bypassed or fails to clean up all sequences like `--\u003e` (such as using nested sequences or exploiting browser parser quirks on `--!\u003e`), a breakout is highly possible.\nConceptual payload in a VNode of type Comment containing untrusted input:\n```json\n{\n  \"type\": \"Comment\",\n  \"children\": \"--\u003e \u003cscript\u003ealert(1)\u003c/script\u003e \u003c!--\"\n}\n```\nIf `escapeHtmlComment` fails to properly sanitize or strip the `--\u003e` sequence because of browser parsing quirks or nested structures (or if one uses other variations like nested HTML comments or specific characters like `--!\u003e`), it allows injecting arbitrary HTML and JavaScript into the generated SSR output.",
+    "Snippet": "// https://www.w3.org/TR/html52/syntax.html#comments\nconst commentStripRE = /^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$/g\n\nexport function escapeHtmlComment(src: string): string {\n  return src.replace(commentStripRE, '')\n}",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-79",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 47,
+    "EndLine": 52,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

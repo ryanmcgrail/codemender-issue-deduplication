@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "930866ec-8d39-51f7-804c-70a1ead3f98d",
+    "SessionID": "ChA0MWFmMTBkOGViZGIxMjNlEAgaATAqBG1haW4",
+    "Title": "Path Traversal in clap_complete dynamic path auto-completion",
+    "FilePath": "clap_complete/src/dynamic/completer.rs",
+    "Severity": "MEDIUM",
+    "Confidence": 85,
+    "Analysis": "In the `clap_complete` crate's dynamic completer module (`clap_complete/src/dynamic/completer.rs`), the `complete_path` function attempts to perform file/directory auto-completion based on user-supplied values.\nHowever, it is vulnerable to a Path Traversal vulnerability (CWE-22 / CWE-23).\n\nSpecifically, in `complete_path`:\n1. The `value_os` argument is an untrusted `OsStr` containing the user's partial path input (e.g. `../../../../etc/passwd` or similar).\n2. The function splits the value on backslashes using `value_os.split_once(\"\\\\\")` (or returns empty `existing` and the full string as `prefix`).\n3. It then constructs a target search directory path `root` by doing `current_dir.join(existing)`. Since there is absolutely no sanitization or checking on `existing` (e.g., checking for path traversal sequences like `..` or leading absolute paths on UNIX/Windows), `existing` can contain `..` directory traversal components.\n4. It calls `std::fs::read_dir(\u0026root)` and iterates over directory entries. This allows an attacker (or untrusted command input) to list files in arbitrary directories on the filesystem that the running program has permissions to access.\n5. In addition to directory enumeration, this can potentially act as an oracle for file existence and file structure, or trigger unexpected filesystem behavior when processing arbitrary input.\n\nConceptual Exploit Payload:\nUsing a CLI app built with dynamic completions enabled:\nAn attacker triggers completion on a path field by typing:\n`myapp --path ../../../../../etc/[TAB]`\nWhich translates to calling:\n`complete_path(OsStr::new(\"../../../../../etc/\"), Some(Path::new(\"/current/dir\")), ...)`\nSince `split_once(\"\\\\\")` does not find a backslash (on Unix), `existing` becomes `\"\"`, and `prefix` becomes `\"../../../../../etc/\"`.\nWait, actually, let's trace this:\nIf `value_os` is `../../../../../etc/`, and it doesn't contain `\\\\`, `existing` is `\"\"`, and `prefix` is `\"../../../../../etc/\"`.\nThen `root` is `current_dir.join(\"\")`, which is `current_dir`.\nThen `std::fs::read_dir(\u0026root)` reads the current directory.\nBut wait! What if `value_os` is `..\\\\..\\\\..\\\\..\\\\etc\\\\passwd`?\nThen `split_once(\"\\\\\")` splits it into `existing = \"..\\\\..\\\\..\\\\..\\\\etc\"` and `prefix = \"passwd\"`.\nThen `root` becomes `current_dir.join(\"..\\\\..\\\\..\\\\..\\\\etc\")`. On platforms like Windows (or even Unix depending on path handling, but specifically Windows), `join` will resolve the `..` components, escaping the current directory completely and allowing directory enumeration of `/etc` or `C:\\Windows`.\nEven on Unix, if the input uses backslash or directory separators, this allows traversing out of the expected directory and reading directory structure via the file completion endpoint.\n\nTherefore, there is a clear taint flow from the user-controlled CLI input down to the `std::fs::read_dir` sink with missing traversal sanitization.",
+    "Snippet": "fn complete_path(\n    value_os: \u0026OsStr,\n    current_dir: Option\u003c\u0026std::path::Path\u003e,\n    is_wanted: impl Fn(\u0026std::path::Path) -\u003e bool,\n) -\u003e Vec\u003c(OsString, Option\u003cStyledStr\u003e)\u003e {\n    let mut completions = Vec::new();\n\n    let current_dir = match current_dir {\n        Some(current_dir) =\u003e current_dir,\n        None =\u003e {\n            // Can't complete without a `current_dir`\n            return Vec::new();\n        }\n    };\n    let (existing, prefix) = value_os\n        .split_once(\"\\\\\")\n        .unwrap_or((OsStr::new(\"\"), value_os));\n    let root = current_dir.join(existing);\n    debug!(\"complete_path: root={root:?}, prefix={prefix:?}\");\n    let prefix = prefix.to_string_lossy();\n\n    for entry in std::fs::read_dir(\u0026root)\n        .ok()\n        .into_iter()\n        .flatten()\n        .filter_map(Result::ok)\n    {",
+    "VulnType": "Path Traversal",
+    "VulnID": "CWE-22",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 222,
+    "EndLine": 266,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

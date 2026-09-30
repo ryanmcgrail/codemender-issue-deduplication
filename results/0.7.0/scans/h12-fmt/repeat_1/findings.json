@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "a1f75154-5bac-57d6-9fe5-0f849f093cab",
+    "session_id": "ChA2NjRlYWY3YTZhZGY1YjEzEAgaATAqBG1haW4",
+    "title": "Null Pointer Dereference in `fmt::vprintf` when formatting a null `cstring_type` with precision specifier",
+    "file_path": "/home/jfplante_google_com/repos/h12-fmt_rep1/include/fmt/printf.h",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `fmt::vprintf` (defined in `include/fmt/printf.h`), if a format specifier defines a precision (e.g., `\"%.10s\"`) and the corresponding argument has type `cstring_type` (such as a typed null pointer `(const char*)nullptr`), the code attempts to limit the string length to the specified precision by finding the null-terminator within the first `specs.precision` bytes.\n\nHowever, the code does not check whether `str` is `nullptr` before executing pointer arithmetic and searching the memory. When `str` is `nullptr` and `specs.precision \u003e 0`:\n1. `str = visit_format_arg(get_cstring\u003cChar\u003e(), arg);` retrieves `nullptr` as the C-string pointer.\n2. `str_end = str + specs.precision;` computes `nullptr + specs.precision`, which is undefined behavior under the C++ standard.\n3. `std::find(str, str_end, Char());` is called as `std::find(nullptr, nullptr + specs.precision, Char())`. Since `str != str_end`, the function attempts to dereference `nullptr` on its very first iteration, leading to a Null Pointer Dereference crash (Segmentation Fault).\n\n### Conceptual Exploit Payload\n```cpp\n#include \u003cfmt/printf.h\u003e\n\nint main() {\n    // Triggers the vulnerability and crashes the application with a SIGSEGV.\n    const char* null_string = nullptr;\n    fmt::printf(\"%.10s\\n\", null_string);\n    return 0;\n}\n```",
+    "snippet": "    if (specs.precision \u003e= 0 \u0026\u0026 arg.type() == type::cstring_type) {\n      auto str = visit_format_arg(get_cstring\u003cChar\u003e(), arg);\n      auto str_end = str + specs.precision;\n      auto nul = std::find(str, str_end, Char());\n      auto sv = basic_string_view\u003cChar\u003e(\n          str, to_unsigned(nul != str_end ? nul - str : specs.precision));\n      arg = make_arg\u003cbasic_printf_context\u003cChar\u003e\u003e(sv);\n    }",
+    "vuln_type": "CWE-476: NULL Pointer Dereference",
+    "vuln_id": "CWE-476",
+    "status": "OPEN",
+    "start_line": 481,
+    "end_line": 488
+  }
+]

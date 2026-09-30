@@ -1,0 +1,50 @@
+[
+  {
+    "finding_id": "c8ab39a4",
+    "severity": "MEDIUM",
+    "vuln_type": "Memory Corruption",
+    "file_path": "ssl/ssl_lib.c",
+    "title": "Out-of-bounds Read in SSL_select_next_proto",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Out-of-bounds Read in SSL_select_next_proto",
+    "snippet": ""
+  },
+  {
+    "finding_id": "43b5956d",
+    "severity": "MEDIUM",
+    "vuln_type": "Memory Corruption",
+    "file_path": "crypto/x509/v3_ncons.c",
+    "title": "NULL Pointer Dereference in X.509 Name Constraints nc_email_eai",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "NULL Pointer Dereference in X.509 Name Constraints nc_email_eai",
+    "snippet": ""
+  },
+  {
+    "finding_id": "e71aa9c1",
+    "severity": "HIGH",
+    "vuln_type": "Memory Corruption",
+    "file_path": "crypto/bn/bn_gf2m.c",
+    "title": "Out-of-bounds Read and Write in BN_GF2m_mod_arr",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Out-of-bounds Read and Write in BN_GF2m_mod_arr",
+    "snippet": ""
+  },
+  {
+    "finding_id": "09edc8de",
+    "severity": "HIGH",
+    "vuln_type": "Memory Corruption",
+    "file_path": "ssl/record/methods/tls_common.c",
+    "title": "Use-After-Free in tls_free_buffers",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Use-After-Free in tls_free_buffers",
+    "snippet": ""
+  }
+]

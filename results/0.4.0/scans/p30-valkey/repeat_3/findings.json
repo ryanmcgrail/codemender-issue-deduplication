@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "b22660f7-e8c5-58f7-8a0f-4b46dfbf7668",
+    "SessionID": "ChA2ZGVmNTE5Y2EwZmYxNjBlEAgaATAqBG1haW4",
+    "Title": "Integer Overflow/Casting Vulnerability in lua_struct b_unpack",
+    "FilePath": "/home/jfplante_google_com/repos/p30-valkey_rep3/deps/lua/src/lua_struct.c",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "The variable `pos` is declared as a `size_t` (unsigned) but initialized via `luaL_optinteger` which returns a signed integer. If a negative offset (e.g. `-1`) is passed, it is cast to a large positive value (`18446744073709551615`). The check `pos \u003e 0` then evaluates to true, bypassing validation.\n\n`pos` is subsequently decremented to `18446744073709551614`. Inside the unpacking loop, `pos += gettoalign(pos, \u0026h, opt, size)` is called, which can wrap `pos` around to a small positive value (e.g., `0`) due to unsigned integer overflow. If `pos` wraps around, the condition `pos \u003c= ld - size` can succeed, allowing arbitrary values to be read or causing logic errors in the VM.\n\nThis allows attackers with script execution access to trigger unexpected memory operations or crash the server.\n\nConceptual Exploit Payload:\nAn attacker can invoke `EVAL` with a Lua script calling `struct.unpack('!4I4', 'A', -2)`.\nHere, the offset `-2` becomes `18446744073709551614` (`(size_t)-2`).\n`pos \u003e 0` evaluates to true, and `pos--` decrements it to `18446744073709551613`.\nThe option `!4` sets the alignment constraint to 4 bytes.\n`optsize` for `'I4'` returns 4.\n`gettoalign` computes:\n`len = 18446744073709551613`\n`len \u0026 (size - 1)` = `18446744073709551613 \u0026 3` = `1`.\n`size - 1` = `3`.\n`(size - 1) \u0026 3` = `3`.\nSo `gettoalign` returns `3`.\n`pos += 3` makes `pos` wrap around to `0` (`18446744073709551613 + 3 = 18446744073709551616 = 0`).\nThen `pos \u003c= ld - size` evaluates to `0 \u003c= 1 - 4`, which wraps around to `0 \u003c= 18446744073709551613`, which is true!\nAs a result, `data + pos` (where `pos` is `0`) is read, which triggers an out-of-bounds read or logic bypass.",
+    "Snippet": "  size_t pos = luaL_optinteger(L, 3, 1);\n  luaL_argcheck(L, pos \u003e 0, 3, \"offset must be 1 or greater\");\n  pos--; /* Lua indexes are 1-based, but here we want 0-based for C\n          * pointer math. */",
+    "VulnType": "Integer Overflow",
+    "VulnID": "CWE-190",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 298,
+    "EndLine": 302,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "bb1e7535",
+    "severity": "HIGH",
+    "vuln_type": "Information Exposure",
+    "file_path": "services/src/main/java/org/keycloak/services/managers/ResourceAdminManager.java",
+    "title": "Information Disclosure / Environment Variable Exfiltration via StringPropertyReplacer in Client Backchannel Logout URL",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Information Disclosure / Environment Variable Exfiltration via StringPropertyReplacer in Client Backchannel Logout URL",
+    "snippet": ""
+  }
+]

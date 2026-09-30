@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "06bdbb7f-d6b6-5566-8af7-22710ec7f6aa",
+    "SessionID": "ChA5ZGE1Nzk4OTEzOTJiZWJmEAgaATAqBG1haW4",
+    "Title": "Server-Side Rendering Attribute Injection via Carriage Return (CR) Bypass",
+    "FilePath": "/home/jfplante_google_com/repos/p11-vue_rep3/packages/shared/src/domAttrConfig.ts",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability: SSR HTML/Attribute Injection leading to Cross-Site Scripting (XSS)\n\n#### Source:\nAn untrusted user-controlled object containing dynamic properties is passed to Vue's Server-Side Renderer (SSR), or dynamic attributes are rendered using `v-bind` (e.g., `\u003cdiv v-bind=\"dynamicAttrs\"\u003e\u003c/div\u003e`).\n\n#### Sanitization/Validation:\nIn `packages/shared/src/domAttrConfig.ts`, the function `isSSRSafeAttrName(name: string)` is used to validate attribute names during SSR to prevent attribute breakout and XSS.\n```typescript\nconst unsafeAttrCharRE = /[\u003e/=\\\"'\\u0009\\u000a\\u000c\\u0020]/\nconst attrValidationCache: Record\u003cstring, boolean\u003e = {}\n\nexport function isSSRSafeAttrName(name: string): boolean {\n  if (attrValidationCache.hasOwnProperty(name)) {\n    return attrValidationCache[name]\n  }\n  const isUnsafe = unsafeAttrCharRE.test(name)\n  if (isUnsafe) {\n    console.error(`unsafe attribute name: ${name}`)\n  }\n  return (attrValidationCache[name] = !isUnsafe)\n}\n```\nThe regular expression `unsafeAttrCharRE` is intended to match any unsafe character in HTML/SVG attribute names that could allow breaking out of the attribute value context or introducing new attributes. However, it is missing the carriage return character (`\\r` or `\\u000d`), which is treated as a valid whitespace character / attribute separator by the HTML5 parsing specification.\n\n#### Sink:\nIn `packages/server-renderer/src/helpers/ssrRenderAttrs.ts`, the function `ssrRenderDynamicAttr` calls `isSSRSafeAttrName(attrKey)` and constructs the returned HTML attribute string:\n```typescript\n  } else if (isSSRSafeAttrName(attrKey)) {\n    return value === '' ? ` ${attrKey}` : ` ${attrKey}=\\\"${escapeHtml(value)}\\\"`\n```\nBecause `\\r` (`\\u000d`) is not caught by `unsafeAttrCharRE`, it returns `true`. The resulting string is rendered directly to the SSR output stream.\n\n#### Conceptual Exploit Payload:\nSuppose a malicious user registers a profile where their user-defined metadata includes a dynamic attribute key.\nWhen rendering on the server:\n```typescript\nconst dynamicAttrs = {\n  \"x\\u000dstyle\": \"background:url(javascript:alert(1))\"\n};\n```\nOr, to inject an arbitrary attribute like `onmouseover`:\nIf we use a key that breaks out of the attribute and injects another, since the browser parses `\\r` as whitespace, we can craft an attribute key like:\n`\"a\\u000dautofocus\\u000donfocus\": \"alert(1)\"` (Wait, this contains no `=`, `\"`, `'`, or other characters blocked by `unsafeAttrCharRE`!)\nWhen Vue SSR renders this, it generates:\n```html\n\u003cdiv a\nautofocus\nonfocus=\"alert(1)\"\u003e\u003c/div\u003e\n```\nWhen this HTML is sent to and parsed by the browser, the browser treats the carriage return (`\\u000d`) as space, splitting the attribute name. It parses `autofocus` and `onfocus=\"alert(1)\"` as separate valid attributes, triggering immediate JavaScript execution without user interaction.",
+    "Snippet": "const unsafeAttrCharRE = /[\u003e/=\\\"'\\u0009\\u000a\\u000c\\u0020]/\nconst attrValidationCache: Record\u003cstring, boolean\u003e = {}\n\nexport function isSSRSafeAttrName(name: string): boolean {\n  if (attrValidationCache.hasOwnProperty(name)) {\n    return attrValidationCache[name]\n  }\n  const isUnsafe = unsafeAttrCharRE.test(name)\n  if (isUnsafe) {\n    console.error(`unsafe attribute name: ${name}`)\n  }\n  return (attrValidationCache[name] = !isUnsafe)\n}",
+    "VulnType": "CWE-79",
+    "VulnID": "CWE-79",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 35,
+    "EndLine": 47,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

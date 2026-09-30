@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "a79b03f4-8db9-558e-8ebb-439e4dd2296b",
+    "session_id": "ChA1ZWFhODc4NjM1MjFkYThhEAgaATAqBG1haW4",
+    "title": "Unbounded Recursion and Stack Overflow in luaReplyToRedisReply (CVE-2024-46981)",
+    "file_path": "/home/jfplante_google_com/repos/p30-valkey_rep1/src/script_lua.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `src/script_lua.c`, `luaReplyToRedisReply` is responsible for converting a Lua script's return value on the Lua stack into RESP (Redis Serialization Protocol) replies sent to the client.\n\nWhen the return value is a Lua table (`LUA_TTABLE`), `luaReplyToRedisReply` recursively unpacks its elements:\n- In array handling (lines 761-777):\n```c\n        /* Handle the array reply. */\n        void *replylen = addReplyDeferredLen(c);\n        int j = 1, mbulklen = 0;\n        while(1) {\n            /* we took care of the stack size on function start */\n            lua_pushnumber(lua,j++);\n            lua_rawget(lua,-2);\n            t = lua_type(lua,-1);\n            if (t == LUA_TNIL) {\n                lua_pop(lua,1);\n                break;\n            }\n            luaReplyToRedisReply(c, script_client, lua);\n            mbulklen++;\n        }\n        setDeferredArrayLen(c,replylen,mbulklen);\n```\n- In map handling (lines 720-735) and set handling (lines 742-758), `luaReplyToRedisReply` is similarly called recursively on each child element.\n\nData Path Analysis:\n1. **Source**: An authenticated client executes a Lua script via `EVAL`, `EVALSHA`, or `FCALL` that returns a nested or circular Lua table structure.\n2. **Sanitization/Validation**: There is NO maximum recursion depth check or cycle detection (such as a visited table hash set) implemented in `luaReplyToRedisReply`.\n3. **Sink**: The function calls itself recursively (`luaReplyToRedisReply`) on the C call stack. If a table contains a circular reference (e.g. `t[1] = t`) or if it is nested tens of thousands of levels deep (e.g. `for i=1,100000 do t={t} end`), the C call stack frames grow unbounded until stack memory is exhausted, causing a segmentation fault and crashing the server process.\n\n**Conceptual Exploit Payload**:\nAn authenticated user sends:\n`EVAL \"local t = {}; t[1] = t; return t\" 0`\nor\n`EVAL \"local t = {}; for i=1,100000 do t = {t} end; return t\" 0`\n\nWhen `luaCallFunction` calls `luaReplyToRedisReply` to serialize the return value, it encounters infinite/deep recursion on the C stack, immediately terminating Valkey via SIGSEGV.",
+    "snippet": "static void luaReplyToRedisReply(client *c, client* script_client, lua_State *lua) {\n...\n        /* Handle the array reply. */\n        void *replylen = addReplyDeferredLen(c);\n        int j = 1, mbulklen = 0;\n        while(1) {\n            /* we took care of the stack size on function start */\n            lua_pushnumber(lua,j++);\n            lua_rawget(lua,-2);\n            t = lua_type(lua,-1);\n            if (t == LUA_TNIL) {\n                lua_pop(lua,1);\n                break;\n            }\n            luaReplyToRedisReply(c, script_client, lua);\n            mbulklen++;\n        }\n        setDeferredArrayLen(c,replylen,mbulklen);\n        break;\n...\n}",
+    "vuln_type": "Uncontrolled Recursion",
+    "vuln_id": "CWE-674",
+    "status": "OPEN",
+    "start_line": 598,
+    "end_line": 782
+  },
+  {
+    "finding_id": "6dcf2cc7-5bbb-519f-9d02-a9167c9fb04a",
+    "session_id": "ChA1ZWFhODc4NjM1MjFkYThhEAgaATAqBG1haW4",
+    "title": "Unbounded Recursion and Stack Overflow in Lua cjson (CVE-2024-31227)",
+    "file_path": "/home/jfplante_google_com/repos/p30-valkey_rep1/deps/lua/src/lua_cjson.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `deps/lua/src/lua_cjson.c`, `json_cfg_decode_max_depth` (and `json_cfg_encode_max_depth`) allows the user to configure the maximum recursion depth for parsing JSON up to `INT_MAX`:\n\n```c\nstatic int json_cfg_decode_max_depth(lua_State *l)\n{\n    json_config_t *cfg = json_arg_init(l, 1);\n\n    return json_integer_option(l, 1, \u0026cfg-\u003edecode_max_depth, 1, INT_MAX);\n}\n```\n\nData Path Analysis:\n1. **Source**: An authenticated client calls `cjson.decode_max_depth(...)` and `cjson.decode(...)` via an `EVAL` or `EVALSHA` command.\n2. **Sanitization/Validation**: The function validates the option range using `json_integer_option`, but specifies an upper bound of `INT_MAX`. This effectively disables protection against excessive nesting by allowing scripts to set the maximum allowed depth higher than what the process's C call stack can handle.\n3. **Sink**: When parsing nested JSON structures, `json_decode` invokes `json_process_value`, which recursively calls `json_parse_array_context` or `json_parse_object_context`, which in turn calls `json_decode_descend`. Because the permitted depth exceeds stack capacity, processing deeply nested input exhausts the C thread stack, leading to a stack overflow segmentation fault and crashing the Valkey process (Denial of Service).\n\n**Conceptual Exploit Payload**:\nAn authenticated user issues:\n`EVAL \"cjson.decode_max_depth(100000); return cjson.decode(string.rep('[', 50000) .. string.rep(']', 50000))\" 0`\n\nThis configures a high depth limit and supplies a payload nested 50,000 levels deep, triggering unbounded recursive function calls in the CJSON parser until a stack overflow SIGSEGV crashes the server.",
+    "snippet": "static int json_cfg_decode_max_depth(lua_State *l)\n{\n    json_config_t *cfg = json_arg_init(l, 1);\n\n    return json_integer_option(l, 1, \u0026cfg-\u003edecode_max_depth, 1, INT_MAX);\n}",
+    "vuln_type": "Uncontrolled Recursion",
+    "vuln_id": "CWE-674",
+    "status": "OPEN",
+    "start_line": 291,
+    "end_line": 296
+  },
+  {
+    "finding_id": "9bdbe6b2-fdc2-5a81-a1aa-a262843c29a1",
+    "session_id": "ChA1ZWFhODc4NjM1MjFkYThhEAgaATAqBG1haW4",
+    "title": "Unbounded Recursion and Stack Overflow in Lua cmsgpack Decoding (CVE-2024-31228)",
+    "file_path": "/home/jfplante_google_com/repos/p30-valkey_rep1/deps/lua/src/lua_cmsgpack.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `deps/lua/src/lua_cmsgpack.c`, the MessagePack decoding implementation lacks any depth or recursion limiting in `mp_decode_to_lua_array` and `mp_decode_to_lua_hash`.\n\nData Path Analysis:\n1. **Source**: An untrusted MessagePack payload passed to `cmsgpack.unpack()`, `cmsgpack.unpack_one()`, or `cmsgpack.unpack_limit()` within a Lua script executed by `EVAL` or `EVALSHA`.\n2. **Sanitization/Validation**: While `cmsgpack.pack` enforces `LUACMSGPACK_MAX_NESTING` (16) during serialization to avoid infinite loops on circular tables, no recursion limit is enforced anywhere in the decoding pipeline (`mp_decode_to_lua_array`, `mp_decode_to_lua_hash`, or `mp_decode_to_lua_type`).\n3. **Sink**: When `mp_decode_to_lua_type` parses a nested container (such as a 1-element array indicated by `0x91`), it recursively calls `mp_decode_to_lua_array`, which in turn calls `mp_decode_to_lua_type`. For deeply nested inputs, each nesting level consumes stack frames on the C call stack. Because there is no check or limit on recursion depth during decode, this mutual recursion consumes stack frames until the thread stack is exhausted, triggering a stack overflow segmentation fault and crashing the Valkey process.\n\n**Conceptual Exploit Payload**:\nAn authenticated user sends:\n`EVAL \"return cmsgpack.unpack(string.rep('\\x91', 100000) .. '\\x00')\" 0`\n\nHere, each byte `\\x91` represents a single-element MessagePack array, nesting 100,000 deep. When `cmsgpack.unpack` attempts to parse it, the unbounded recursive calls exhaust the C stack and terminate the server process via SIGSEGV.",
+    "snippet": "void mp_decode_to_lua_array(lua_State *L, mp_cur *c, size_t len) {\n    assert(len \u003c= UINT_MAX);\n    int index = 1;\n\n    lua_newtable(L);\n    luaL_checkstack(L, 1, \"in function mp_decode_to_lua_array\");\n    while(len--) {\n        lua_pushnumber(L,index++);\n        mp_decode_to_lua_type(L,c);\n        if (c-\u003eerr) return;\n        lua_settable(L,-3);\n    }\n}",
+    "vuln_type": "Uncontrolled Recursion",
+    "vuln_id": "CWE-674",
+    "status": "OPEN",
+    "start_line": 554,
+    "end_line": 578
+  },
+  {
+    "finding_id": "579479de-ff46-58a9-8f61-d18c4976d8eb",
+    "session_id": "ChA1ZWFhODc4NjM1MjFkYThhEAgaATAqBG1haW4",
+    "title": "Out-of-bounds Stack Read and Integer Overflow in Lua bit.tohex (CVE-2024-31449)",
+    "file_path": "/home/jfplante_google_com/repos/p30-valkey_rep1/deps/lua/src/lua_bit.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In the Lua bit library embedded in Valkey/Redis (`deps/lua/src/lua_bit.c`), the `bit_tohex` function converts a numeric value to a hexadecimal string representation with a specified length `n`:\n\n```c\nstatic int bit_tohex(lua_State *L)\n{\n  UBits b = barg(L, 1);\n  SBits n = lua_isnone(L, 2) ? 8 : (SBits)barg(L, 2);\n  const char *hexdigits = \"0123456789abcdef\";\n  char buf[8];\n  int i;\n  if (n \u003c 0) { n = -n; hexdigits = \"0123456789ABCDEF\"; }\n  if (n \u003e 8) n = 8;\n  for (i = (int)n; --i \u003e= 0; ) { buf[i] = hexdigits[b \u0026 15]; b \u003e\u003e= 4; }\n  lua_pushlstring(L, buf, (size_t)n);\n  return 1;\n}\n```\n\nData Path Analysis:\n1. **Source**: Untrusted user input via Redis/Valkey `EVAL` or `EVALSHA` commands calling `bit.tohex(...)`.\n2. **Sanitization/Validation**: The function attempts to validate negative length values by negating them: `if (n \u003c 0) { n = -n; hexdigits = \"0123456789ABCDEF\"; }` and clamping `n`: `if (n \u003e 8) n = 8;`. However, when `n` is `INT32_MIN` (`-2147483648` or `0x80000000`), `-n` causes undefined behavior in two's complement arithmetic and overflows, leaving `n` equal to `-2147483648`. Because `n` is negative, `if (n \u003e 8)` evaluates to false.\n3. **Sink**: The loop `for (i = (int)n; --i \u003e= 0; )` does not execute. Then, `lua_pushlstring(L, buf, (size_t)n)` is called where `buf` is a local 8-byte stack buffer and `(size_t)n` is converted to an unsigned integer. On 64-bit systems, `(size_t)(int32_t)-2147483648` evaluates to `0xffffffff80000000` (18,446,744,071,562,067,968 bytes); on 32-bit systems, it is `2147483648` (2GB). This causes an out-of-bounds read past the stack buffer, leading to immediate segmentation fault / denial of service.\n\n**Conceptual Exploit Payload**:\nAn authenticated client (or any default client with default ACL permissions) issues:\n`EVAL \"return bit.tohex(1, -2147483648)\" 0`\nor\n`EVAL \"return bit.tohex(1, -0x80000000)\" 0`\n\nThis triggers the integer overflow in `bit_tohex`, calling `lua_pushlstring` with an enormous length, crashing the Valkey server process immediately.",
+    "snippet": "static int bit_tohex(lua_State *L)\n{\n  UBits b = barg(L, 1);\n  SBits n = lua_isnone(L, 2) ? 8 : (SBits)barg(L, 2);\n  const char *hexdigits = \"0123456789abcdef\";\n  char buf[8];\n  int i;\n  if (n \u003c 0) { n = -n; hexdigits = \"0123456789ABCDEF\"; }\n  if (n \u003e 8) n = 8;\n  for (i = (int)n; --i \u003e= 0; ) { buf[i] = hexdigits[b \u0026 15]; b \u003e\u003e= 4; }\n  lua_pushlstring(L, buf, (size_t)n);\n  return 1;\n}",
+    "vuln_type": "Out-of-bounds Read",
+    "vuln_id": "CWE-125",
+    "status": "OPEN",
+    "start_line": 128,
+    "end_line": 140
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "67230356",
+    "severity": "HIGH",
+    "vuln_type": "Path Traversal / Symlink Following",
+    "file_path": "reposerver/repository/repository.go",
+    "title": "Arbitrary File Read via Symlinks in GetGitFiles",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary File Read via Symlinks in GetGitFiles",
+    "snippet": ""
+  },
+  {
+    "finding_id": "e99630a7",
+    "severity": "HIGH",
+    "vuln_type": "Path Traversal / Improper Link Resolution",
+    "file_path": "util/io/path/resolved.go",
+    "title": "Path Traversal via Intermediate Directory Symlinks in Path Resolution",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Path Traversal via Intermediate Directory Symlinks in Path Resolution",
+    "snippet": ""
+  }
+]

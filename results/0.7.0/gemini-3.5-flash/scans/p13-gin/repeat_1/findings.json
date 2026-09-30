@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "17bc2343-4438-504b-a60b-ce8813f8bf44",
+    "session_id": "ChBiYmJkMTM2NGI3MmM1NWY0EAgaATAqBG1haW4",
+    "title": "Uncontrolled Resource Consumption in Multipart Form Binding (GO-2023-1571)",
+    "file_path": "/home/jfplante_google_com/repos/p13-gin_rep1/binding/form.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Go's standard `ParseMultipartForm` parses multipart requests up to a specified memory limit (e.g. `defaultMemory`), and puts any excess parsed file data on disk as temporary files. However, neither `http.Request.ParseMultipartForm` nor Gin's multipart bindings enforce a hard limit on the total size of the request body by default (such as via `http.MaxBytesReader`). An attacker can send an extremely large multipart form request (e.g. gigabytes of text fields or file uploads), causing the server to run out of memory (OOM) or consume all available disk space, leading to a Denial of Service (DoS).\n\n### Conceptual Exploit Payload\nSend a POST request with `Content-Type: multipart/form-data; boundary=boundary` containing an endlessly streaming body of junk data or text fields. The server will keep reading and parsing the input indefinitely, writing it to disk or allocating memory, until it runs out of resources.\n```http\nPOST /upload HTTP/1.1\nHost: vulnerable-server.com\nContent-Type: multipart/form-data; boundary=---------------------------1234567890\nContent-Length: 999999999999\n\n-----------------------------1234567890\nContent-Disposition: form-data; name=\"file\"; filename=\"huge.txt\"\nContent-Type: text/plain\n\n[Streaming gigabytes of random bytes]\n-----------------------------1234567890--\n```",
+    "snippet": "\tif err := req.ParseMultipartForm(defaultMemory); err != nil \u0026\u0026 !errors.Is(err, http.ErrNotMultipart) {\n\t\treturn err\n\t}",
+    "vuln_type": "CWE-400",
+    "vuln_id": "CVE-2023-29401",
+    "status": "OPEN",
+    "start_line": 26,
+    "end_line": 56
+  },
+  {
+    "finding_id": "0cb78cc9-e287-583b-bd8f-8886264a5fe6",
+    "session_id": "ChBiYmJkMTM2NGI3MmM1NWY0EAgaATAqBG1haW4",
+    "title": "Uncontrolled Resource Consumption in Context Multipart Form Parsing (GO-2023-1571)",
+    "file_path": "/home/jfplante_google_com/repos/p13-gin_rep1/context.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `context.go`, functions such as `initFormCache()`, `FormFile()`, and `MultipartForm()` call `c.Request.ParseMultipartForm(c.engine.MaxMultipartMemory)` without enforcing a hard limit on the overall request body size (such as via `http.MaxBytesReader`). An attacker can send an extremely large multipart form request (e.g. gigabytes of text fields or file uploads), causing the server to run out of memory (OOM) or consume all available disk space, leading to a Denial of Service (DoS).\n\n### Conceptual Exploit Payload\nSend a POST request with `Content-Type: multipart/form-data; boundary=boundary` containing an endlessly streaming body of junk data or text fields. The server will keep reading and parsing the input indefinitely, writing it to disk or allocating memory, until it runs out of resources.\n```http\nPOST /upload HTTP/1.1\nHost: vulnerable-server.com\nContent-Type: multipart/form-data; boundary=---------------------------1234567890\nContent-Length: 999999999999\n\n-----------------------------1234567890\nContent-Disposition: form-data; name=\"file\"; filename=\"huge.txt\"\nContent-Type: text/plain\n\n[Streaming gigabytes of random bytes]\n-----------------------------1234567890--\n```",
+    "snippet": "\t\tif err := req.ParseMultipartForm(c.engine.MaxMultipartMemory); err != nil {\n\t\t\tif !errors.Is(err, http.ErrNotMultipart) {\n\t\t\t\tdebugPrint(\"error on parse multipart form array: %v\", err)\n\t\t\t}\n\t\t}",
+    "vuln_type": "CWE-400",
+    "vuln_id": "CVE-2023-29401",
+    "status": "OPEN",
+    "start_line": 543,
+    "end_line": 607
+  },
+  {
+    "finding_id": "aa1c12a2-023c-52c8-8ad0-659aca9ef528",
+    "session_id": "ChBiYmJkMTM2NGI3MmM1NWY0EAgaATAqBG1haW4",
+    "title": "Open Redirect via X-Forwarded-Prefix and RedirectTrailingSlash",
+    "file_path": "/home/jfplante_google_com/repos/p13-gin_rep1/gin.go",
+    "severity": "MEDIUM",
+    "confidence": 95,
+    "analysis": "In Gin's `redirectTrailingSlash` handler, the value of the `X-Forwarded-Prefix` HTTP header is cleaned and sanitized to determine the target path for a redirection when `RedirectTrailingSlash` is enabled. However, the sanitization logic is insufficient:\n1. `path.Clean` is called on the prefix. If the prefix is `api/../../`, `path.Clean` returns `../`.\n2. `regSafePrefix.ReplaceAllString` is called to strip characters that are not in `a-zA-Z0-9/-`. This strips the `.` characters, transforming `../` into `//`.\n3. `regRemoveRepeatedChar.ReplaceAllString` replaces multiple slashes with a single slash, transforming `//` into `/`.\n4. Then `p = prefix + \"/\" + req.URL.Path` results in `\"/\" + \"/\" + \"/path/\"` which is `\"///path/\"`.\n5. Finally, the trailing slash is cleaned and `req.URL.Path` becomes `\"///path\"`.\n6. When `redirectRequest` calls `req.URL.String()`, the resulting URL begins with `//path` (e.g. `//path`).\n7. Because it starts with double slashes and has no scheme/host, browsers and HTTP clients treat `\"//path\"` as a protocol-relative URL pointing to the hostname `\"path\"`.\n\nIf an application defines dynamic routes or parameter-based routes (such as `/:username` or `/*filepath`) where the first path segment can be user-controlled, an attacker can exploit this behavior to perform an open redirect to an arbitrary host (without dots, e.g. `localhost` or custom top-level domains/local hosts, or hosts with hyphens like `attacker-com`).\n\n### Conceptual Exploit Payload\nIf the web application defines a route like `/:username`, and the user sends the following HTTP request:\n```http\nGET /attacker-com/ HTTP/1.1\nHost: vulnerable-app.com\nX-Forwarded-Prefix: api/../../\n```\nThe server will respond with a `301 Moved Permanently` redirect to:\n```http\nLocation: //attacker-com\n```\nWhen a browser receives this response, it will redirect the user to `http://attacker-com/` or `https://attacker-com/`.",
+    "snippet": "func redirectTrailingSlash(c *Context) {\n\treq := c.Request\n\tp := req.URL.Path\n\tif prefix := path.Clean(c.Request.Header.Get(\"X-Forwarded-Prefix\")); prefix != \".\" {\n\t\tprefix = regSafePrefix.ReplaceAllString(prefix, \"\")\n\t\tprefix = regRemoveRepeatedChar.ReplaceAllString(prefix, \"/\")\n\n\t\tp = prefix + \"/\" + req.URL.Path\n\t}\n\treq.URL.Path = p + \"/\"\n\tif length := len(p); length \u003e 1 \u0026\u0026 p[length-1] == '/' {\n\t\treq.URL.Path = p[:length-1]\n\t}\n\tredirectRequest(c)\n}",
+    "vuln_type": "CWE-601",
+    "vuln_id": "CVE-2022-31101",
+    "status": "OPEN",
+    "start_line": 692,
+    "end_line": 706
+  }
+]

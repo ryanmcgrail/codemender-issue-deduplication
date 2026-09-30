@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "0f7c87ad-f403-592b-85d2-9de67855512a",
+    "session_id": "ChBhMzUyMmQwMDhhNDkxNmI1EAgaATAqBG1haW4",
+    "title": "Reflected Cross-Site Scripting (XSS) in Swagger UI Plugin via request path",
+    "file_path": "/home/jfplante_google_com/repos/p25-ktor_rep1/ktor-server/ktor-server-plugins/ktor-server-swagger/jvm/src/io/ktor/server/plugins/swagger/Swagger.kt",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The Ktor Swagger UI plugin dynamically generates HTML containing a Javascript block that incorporates `call.request.path()` (which corresponds to `fullPath`) into a string literal. Since `fullPath` is extracted directly from the HTTP request line without any sanitization or encoding, an attacker can supply a specially crafted request path containing single quotes to escape the Javascript string delimiter and inject arbitrary executable Javascript payload (XSS).\n\n### Conceptual Exploit Payload\nIf the Swagger UI is mapped to `/swagger`, an attacker can craft a request such as:\n`GET /swagger',x:alert(document.domain),y:' HTTP/1.1`\n\nThe server will generate the following HTML and Javascript block:\n```html\n\u003cscript\u003e\nwindow.onload = function() {\n    window.ui = SwaggerUIBundle({\n        url: '/swagger',x:alert(document.domain),y:'/documentation.yaml',\n        dom_id: '#swagger-ui',\n...\n```\nThis is valid Javascript syntax that will immediately execute the injected `alert(document.domain)` function in the victim's browser when they access the URL.",
+    "snippet": "        get {\n            val fullPath = call.request.path()\n            call.respondHtml {\n                head {\n                    title { +\"Swagger UI\" }\n                    link(\n                        href = \"${config.packageLocation}@${config.version}/swagger-ui.css\",\n                        rel = \"stylesheet\"\n                    )\n                    config.customStyle?.let {\n                        link(href = it, rel = \"stylesheet\")\n                    }\n                }\n                body {\n                    div { id = \"swagger-ui\" }\n                    script(src = \"${config.packageLocation}@${config.version}/swagger-ui-bundle.js\") {\n                        attributes[\"crossorigin\"] = \"anonymous\"\n                    }\n\n                    val src = \"${config.packageLocation}@${config.version}/swagger-ui-standalone-preset.js\"\n                    script(src = src) {\n                        attributes[\"crossorigin\"] = \"anonymous\"\n                    }\n\n                    script {\n                        unsafe {\n                            +\"\"\"\nwindow.onload = function() {\n    window.ui = SwaggerUIBundle({\n        url: '$fullPath/$apiUrl',\n        dom_id: '#swagger-ui',\n        presets: [\n            SwaggerUIBundle.presets.apis,\n            SwaggerUIStandalonePreset\n        ],\n        layout: 'StandaloneLayout'\n    });\n}\n                            \"\"\".trimIndent()\n                        }\n                    }\n                }\n            }\n        }",
+    "vuln_type": "CWE-79",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 63,
+    "end_line": 106
+  }
+]

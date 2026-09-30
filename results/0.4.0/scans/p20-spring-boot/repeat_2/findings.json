@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "4f3874ff-52f9-5074-ab5d-479ab16941fe",
+    "SessionID": "ChA0ZGUzYjYxZjY4MTM2YTBhEAgaATAqBG1haW4",
+    "Title": "Arbitrary Object Deserialization in Remote DevTools HttpRestartServer leading to Remote Code Execution",
+    "FilePath": "/home/jfplante_google_com/repos/p20-spring-boot_rep2/spring-boot-project/spring-boot-devtools/src/main/java/org/springframework/boot/devtools/restart/server/HttpRestartServer.java",
+    "Severity": "CRITICAL",
+    "Confidence": 100,
+    "Analysis": "### Data Flow Trace\n1. **Source**: Untrusted HTTP request body accessed via `request.getBody()` in `HttpRestartServer.handle(ServerHttpRequest, ServerHttpResponse)`.\n2. **Sanitization/Validation**: None. The bytes from the request body are passed directly into a standard `ObjectInputStream` constructor. There are no object filters (e.g., `ObjectInputFilter`) or restrictions placed on which classes can be deserialized.\n3. **Sink**: The binary stream is processed by `objectInputStream.readObject()` on line 74, executing arbitrary code execution if a serializable gadget chain is present on the classpath.\n\n### Conceptual Exploit Payload\nTo trigger this vulnerability, an attacker constructs a serialized gadget chain (such as a CommonsCollections or Spring gadget chain depending on classpath dependencies) and transmits it to the Remote DevTools restart endpoint:\n\n```http\nPOST /~devtools~/restart HTTP/1.1\nHost: target-application.example.com\nX-AUTH-TOKEN: \u003cdevtools-secret-token\u003e\nContent-Type: application/octet-stream\nContent-Length: \u003cpayload-length\u003e\n\n[RAW BINARY SERIALIZED GADGET CHAIN DATA]\n```\n\nAlthough Remote DevTools requires a secret header (`X-AUTH-TOKEN` or similar, depending on configuration) when auto-configured, Java deserialization of untrusted input remains a critical risk. If the secret is weak, leaked, or bypassed, an attacker can completely compromise the host system. Furthermore, no validation of the class type (`ClassLoaderFiles`) is enforced before the deserialization processes the serialized stream, leading to instant gadget execution during the reading phase.",
+    "Snippet": "\t\t\tObjectInputStream objectInputStream = new ObjectInputStream(request.getBody());\n\t\t\tClassLoaderFiles files = (ClassLoaderFiles) objectInputStream.readObject();",
+    "VulnType": "CWE-502",
+    "VulnID": "CWE-502",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 73,
+    "EndLine": 74,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

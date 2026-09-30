@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "237690ff-af1c-57ed-a15a-0c9eecdbca22",
+    "SessionID": "ChAxYTEwMDM2MzYzNjlhNDMxEAgaATAqBG1haW4",
+    "Title": "Null Pointer Dereference (Crash) on Malformed HTTP Proxy Response in SSH Dialer",
+    "FilePath": "/home/jfplante_google_com/repos/p17-opentofu_rep3/internal/communicator/ssh/http_proxy.go",
+    "Severity": "LOW",
+    "Confidence": 100,
+    "Analysis": "In `internal/communicator/ssh/http_proxy.go`, the `proxyDialer.Dial` function initiates an HTTP CONNECT request to establish a tunnel through an HTTP proxy. It reads the response using the `http.ReadResponse` library function. \n\nIf the proxy connection fails, times out, or returns a malformed HTTP response, `http.ReadResponse` returns a non-nil `error` and a `nil` response `res`. \n\nIn the error handling block at line 104-108:\n```go\n\tres, err := http.ReadResponse(bufio.NewReader(c), req)\n\n\tif err != nil {\n\t\tres.Body.Close()\n\t\tc.Close()\n\t\treturn nil, err\n\t}\n```\nThe program immediately calls `res.Body.Close()` when `err != nil` without checking if `res` itself is `nil`. This causes a Null Pointer Dereference panic, crashing the OpenTofu execution environment during connection establishment.\n\n### Conceptual Exploit Payload\nTo trigger this vulnerability:\n1. Configure an SSH connection in an HCL block (e.g., inside a `provisioner \"remote-exec\"`) that is configured to use a proxy URL.\n2. Direct the proxy configuration to a mock TCP server/proxy controlled by an attacker or a network boundary.\n3. When OpenTofu attempts to initiate a connection, the mock server accepts the TCP connection but immediately closes the connection or sends a malformed HTTP response (e.g. `HTTP/1.1 500\\r\\n\\r\\n` without headers or with an early EOF).\n4. `http.ReadResponse` fails to parse the response, returning `nil, err`.\n5. OpenTofu calls `res.Body.Close()` where `res == nil`, causing a Null Pointer Dereference panic and crashing the OpenTofu process.",
+    "Snippet": "\tres, err := http.ReadResponse(bufio.NewReader(c), req)\n\n\tif err != nil {\n\t\tres.Body.Close()\n\t\tc.Close()\n\t\treturn nil, err\n\t}",
+    "VulnType": "CWE-476",
+    "VulnID": "CWE-476",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 102,
+    "EndLine": 108,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

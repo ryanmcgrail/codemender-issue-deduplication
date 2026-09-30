@@ -1,0 +1,86 @@
+[
+  {
+    "finding_id": "d4979087",
+    "severity": "HIGH",
+    "vuln_type": "CWE-22",
+    "file_path": "src/main/java/org/owasp/webgoat/webwolf/FileServer.java",
+    "title": "Path Traversal via Unsanitized Multipart Filename in FileServer.importFile",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Path Traversal via Unsanitized Multipart Filename in FileServer.importFile",
+    "snippet": ""
+  },
+  {
+    "finding_id": "13ec2016",
+    "severity": "CRITICAL",
+    "vuln_type": "CWE-502",
+    "file_path": "src/main/java/org/owasp/webgoat/lessons/vulnerablecomponents/VulnerableComponentsLesson.java",
+    "title": "Insecure Deserialization via Untrusted XStream XML Deserialization in VulnerableComponentsLesson",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Insecure Deserialization via Untrusted XStream XML Deserialization in VulnerableComponentsLesson",
+    "snippet": ""
+  },
+  {
+    "finding_id": "626fae83",
+    "severity": "CRITICAL",
+    "vuln_type": "CWE-502",
+    "file_path": "src/main/java/org/owasp/webgoat/lessons/deserialization/InsecureDeserializationTask.java",
+    "title": "Insecure Java Deserialization in InsecureDeserializationTask",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Insecure Java Deserialization in InsecureDeserializationTask",
+    "snippet": ""
+  },
+  {
+    "finding_id": "51cdbda4",
+    "severity": "CRITICAL",
+    "vuln_type": "CWE-89",
+    "file_path": "src/main/java/org/owasp/webgoat/lessons/jwt/claimmisuse/JWTHeaderKIDEndpoint.java",
+    "title": "SQL Injection via JWT Header Key Identifier (kid) in JWTHeaderKIDEndpoint",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "SQL Injection via JWT Header Key Identifier (kid) in JWTHeaderKIDEndpoint",
+    "snippet": ""
+  },
+  {
+    "finding_id": "de5c59bd",
+    "severity": "HIGH",
+    "vuln_type": "CWE-918",
+    "file_path": "src/main/java/org/owasp/webgoat/lessons/jwt/claimmisuse/JWTHeaderJKUEndpoint.java",
+    "title": "Server-Side Request Forgery (SSRF) and Token Forgery via Untrusted JWT JKU Header",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side Request Forgery (SSRF) and Token Forgery via Untrusted JWT JKU Header",
+    "snippet": ""
+  },
+  {
+    "finding_id": "bb7e2fd9",
+    "severity": "HIGH",
+    "vuln_type": "CWE-22",
+    "file_path": "src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileZipSlip.java",
+    "title": "Arbitrary File Write via Zip Slip in ProfileZipSlip.processZipUpload",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary File Write via Zip Slip in ProfileZipSlip.processZipUpload",
+    "snippet": ""
+  },
+  {
+    "finding_id": "2fd23d14",
+    "severity": "HIGH",
+    "vuln_type": "CWE-611",
+    "file_path": "src/main/java/org/owasp/webgoat/lessons/xxe/CommentsCache.java",
+    "title": "XML External Entity (XXE) Injection in CommentsCache.parseXml",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "XML External Entity (XXE) Injection in CommentsCache.parseXml",
+    "snippet": ""
+  }
+]

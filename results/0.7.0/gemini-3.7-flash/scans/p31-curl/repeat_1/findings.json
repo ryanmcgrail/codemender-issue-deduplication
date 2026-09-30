@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "9a231861",
+    "severity": "HIGH",
+    "vuln_type": "CWE-125: Out-of-bounds Read",
+    "file_path": "lib/vtls/x509asn1.c",
+    "title": "ASN.1 GeneralizedTime Parsing Out-of-Bounds Read in GTime2str",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "ASN.1 GeneralizedTime Parsing Out-of-Bounds Read in GTime2str",
+    "snippet": ""
+  }
+]

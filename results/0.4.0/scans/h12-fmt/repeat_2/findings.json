@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "a3241d61-3858-53ef-8c13-a82188762a1c",
+    "SessionID": "ChAwNWQ2YThhY2UwZjQ4OTZkEAgaATAqBG1haW4",
+    "Title": "Out-of-bounds read in scan_buffer::iterator::operator++",
+    "FilePath": "test/scan.h",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In `test/scan.h`, `scan_buffer::iterator::operator++` contains an out-of-bounds read vulnerability. Specifically, when `buf_-\u003etry_consume()` returns `false`, indicating that the end of the input buffer has been reached and `buf_-\u003eptr_` has been advanced to `buf_-\u003eend_`, the function still unconditionally dereferences `buf_-\u003eptr_` on line 97: `value_ = *buf_-\u003eptr_;`. Since `buf_-\u003eptr_` points to the memory location immediately following the valid buffer data (`buf_-\u003eend_`), this results in an out-of-bounds read of one-past-the-end of the buffer.\n\n### Conceptual Exploit Payload\n\nAn application calls `fmt::scan` to parse user input, for example:\n```cpp\nstd::string input = \"foo\";\nfmt::scan(input, \"foo\");\n```\n\nDuring parsing, the iterator advances through `\"foo\"` character-by-character. When incrementing past the last character:\n1. `try_consume()` is called, incrementing `ptr_` to equal `end_`.\n2. `try_consume()` returns `false`.\n3. `operator++()` executes `value_ = *buf_-\u003eptr_;` which evaluates `*buf_-\u003eend_`, dereferencing the one-past-the-end address. If the input is not null-terminated and is located at a page boundary, this causes a segmentation fault or reads out-of-bounds heap/stack memory.",
+    "Snippet": "    auto operator++() -\u003e iterator\u0026 {\n      if (!buf_-\u003etry_consume()) ptr_ = get_sentinel();\n      value_ = *buf_-\u003eptr_;\n      return *this;\n    }",
+    "VulnType": "CWE-125",
+    "VulnID": "CWE-125",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 95,
+    "EndLine": 99,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "d7713949-d7f9-5251-a976-40048faa5fcb",
+    "session_id": "ChA3ZjNkMTA4Y2QwYzY1MmFkEAgaATAqBG1haW4",
+    "title": "Server-Side Request Forgery (SSRF) via Host Header in Server Action Forwarding",
+    "file_path": "/home/jfplante_google_com/repos/p10-nextjs_rep1/packages/next/src/server/app-render/action-handler.ts",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "A Server-Side Request Forgery (SSRF) vulnerability exists in Next.js Server Actions when forwarding an action request to a separate worker. In `createForwardedActionResponse`, when `process.env.__NEXT_PRIVATE_ORIGIN` is unset, the application constructs the target origin for internal forwarding using `${proto}://${host.value}`, where `host.value` is derived directly from untrusted request headers `x-forwarded-host` or `host`.\n\n- **Source**: Untrusted `Host` or `X-Forwarded-Host` request header in an incoming HTTP request.\n- **Sanitization/Validation**: The CSRF check in `handleAction` only verifies that `originDomain === host.value` if the `Origin` header is provided, or passes with a warning if `Origin` is missing. Neither checks whether `host.value` belongs to the current application or is an authorized internal host.\n- **Sink**: `fetch(fetchUrl, { method: 'POST', body: readableStream, headers: forwardedHeaders })` at line 210.\n\n**Conceptual Exploit Payload**:\nSend a Server Action request targeting an action hosted in another worker:\n```http\nPOST /page-a HTTP/1.1\nHost: 169.254.169.254\nNext-Action: \u003caction-id-for-page-b\u003e\nContent-Type: text/plain\n\npayload\n```\nThe server will issue a POST request to `https://169.254.169.254/page-b` with the client's request body and forwarded headers.",
+    "snippet": "  const origin = process.env.__NEXT_PRIVATE_ORIGIN || `${proto}://${host.value}`\n\n  const fetchUrl = new URL(`${origin}${basePath}${workerPathname}`)\n...\n    // Forward the request to the new worker\n    const response = await fetch(fetchUrl, {\n      method: 'POST',\n      body: readableStream,\n      duplex: 'half',\n      headers: forwardedHeaders,\n      next: {\n        // @ts-ignore\n        internal: 1,\n      },\n    })",
+    "vuln_type": "Server-Side Request Forgery (SSRF)",
+    "vuln_id": "CWE-918",
+    "status": "OPEN",
+    "start_line": 179,
+    "end_line": 220
+  },
+  {
+    "finding_id": "db5c501f-6ded-59ed-950b-a5b1cd857013",
+    "session_id": "ChA3ZjNkMTA4Y2QwYzY1MmFkEAgaATAqBG1haW4",
+    "title": "Server-Side Request Forgery (SSRF) via Host Header in Server Action Redirects",
+    "file_path": "/home/jfplante_google_com/repos/p10-nextjs_rep1/packages/next/src/server/app-render/action-handler.ts",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "A Server-Side Request Forgery (SSRF) vulnerability exists in Next.js Server Actions when handling action redirects. In `createRedirectRenderResult`, when a Server Action redirects to an app-relative path (e.g. `redirect('/...')`), Next.js attempts to pre-fetch the flight render result from the redirected path by sending an internal `fetch` request. If `process.env.__NEXT_PRIVATE_ORIGIN` is not set, the origin is constructed as `${proto}://${originalHost.value}`, where `originalHost` is taken directly from the client's untrusted `x-forwarded-host` or `host` headers.\n\n- **Source**: Untrusted `Host` or `X-Forwarded-Host` request header in an incoming HTTP request triggering a Server Action.\n- **Sanitization/Validation**: The code only checks `isAppRelativeRedirect` (`redirectUrl.startsWith('/') || (originalHost \u0026\u0026 originalHost.value === parsedRedirectUrl.host)`). If the action redirects to any relative path (e.g., `/dashboard`), this check is satisfied. The host origin itself is never validated against an allowlist of trusted origins.\n- **Sink**: `fetch(fetchUrl, { method: 'GET', headers: forwardedHeaders, ... })` at line 298.\n\n**Conceptual Exploit Payload**:\nSend a Server Action request targeting an action that triggers a relative redirect:\n```http\nPOST /login HTTP/1.1\nHost: internal-service.local\nOrigin: http://internal-service.local\nNext-Action: \u003caction-id-that-redirects\u003e\nContent-Type: multipart/form-data; boundary=----WebKitFormBoundary\n\n------WebKitFormBoundary--\n```\nUpon action completion, Next.js calls `fetch('https://internal-service.local/redirect-path')` forwarding sensitive headers including request cookies and revalidation tokens. If the target server responds with `text/x-component`, the response body is streamed directly back to the client.",
+    "snippet": "    const origin =\n      process.env.__NEXT_PRIVATE_ORIGIN || `${proto}://${originalHost.value}`\n\n    const fetchUrl = new URL(\n      `${origin}${basePath}${parsedRedirectUrl.pathname}${parsedRedirectUrl.search}`\n    )\n...\n      const response = await fetch(fetchUrl, {\n        method: 'GET',\n        headers: forwardedHeaders,\n        next: {\n          // @ts-ignore\n          internal: 1,\n        },\n      })",
+    "vuln_type": "Server-Side Request Forgery (SSRF)",
+    "vuln_id": "CWE-918",
+    "status": "OPEN",
+    "start_line": 275,
+    "end_line": 306
+  },
+  {
+    "finding_id": "60ef184f-4d66-5974-9e1c-0497f7d78394",
+    "session_id": "ChA0ZTUyZjhhZTk3ZjRmOTA1EAgaATAqBG1haW4",
+    "title": "Reflected Cross-Site Scripting (XSS) via unescaped dynamic route echo in res.send",
+    "file_path": "/home/jfplante_google_com/repos/p10-nextjs_rep1/examples/with-yarn-workspaces/packages/web-app/pages/api/echo/[word].js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The API route handler in `pages/api/echo/[word].js` accepts the dynamic route parameter `req.query.word` and returns it directly via `res.send(req.query.word)`.\n\nData path analysis:\n- Source: `req.query.word`, an untrusted HTTP request dynamic route parameter.\n- Sanitization/Validation: None. No input validation, escaping, or Content-Type enforcement is applied to the input.\n- Sink: `res.send()`. In Next.js API route resolution (`sendData` in `api-resolver.ts`), string arguments passed to `res.send()` do not set a `Content-Type` header (unlike JSON/objects which set `application/json`) nor is `X-Content-Type-Options: nosniff` attached. The response body is written directly with `res.end(stringifiedBody)`.\n\nConceptual Exploit Payload:\nAn attacker tricks a victim into visiting:\n`GET /api/echo/%3Chtml%3E%3Cbody%3E%3Cscript%3Ealert(document.domain)%3C%2Fscript%3E%3C%2Fbody%3E%3C%2Fhtml%3E HTTP/1.1`\nNext.js parses and decodes the dynamic route parameter `word` to `\u003chtml\u003e\u003cbody\u003e\u003cscript\u003ealert(document.domain)\u003c/script\u003e\u003c/body\u003e\u003c/html\u003e` and sends it back in the HTTP response body. Because no `Content-Type` header is specified, web browsers sniff the HTML payload and execute the injected JavaScript within the victim's session context, resulting in Reflected Cross-Site Scripting (XSS).",
+    "snippet": "  return res.send(req.query.word);",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 2,
+    "end_line": 2
+  },
+  {
+    "finding_id": "8985d21c-89c8-563f-b4dc-d6a8b39313f6",
+    "session_id": "ChA3ZjQzN2UzZDA1ODBjNjJjEAgaATAqBG1haW4",
+    "title": "Path Traversal in getPostBySlug leading to Arbitrary File Read",
+    "file_path": "/home/jfplante_google_com/repos/p10-nextjs_rep1/examples/blog-starter/src/lib/api.ts",
+    "severity": "HIGH",
+    "confidence": 85,
+    "analysis": "The `getPostBySlug` function in `examples/blog-starter/src/lib/api.ts` accepts an unvalidated `slug` parameter directly from the route parameters in `src/app/posts/[slug]/page.tsx` (`params.slug`).\n\nData flow:\n1. Source: Untrusted HTTP request to `/posts/[slug]`, where `params.slug` is provided by the client (e.g., URL-encoded path traversal sequences like `..%2f..%2fREADME`).\n2. Sanitization/Validation: Only `.replace(/\\.md$/, \"\")` is applied to `slug`. There is no check ensuring `fullPath` remains within `postsDirectory` (no path traversal protection against `..` segments).\n3. Sink: `fs.readFileSync(fullPath, \"utf8\")` reads the resolved path from disk and Gray-Matter parses it, after which `Post` renders the content into the HTTP response.\n\nConceptual Exploit Payload:\nSend an HTTP GET request to:\n`GET /posts/..%2f..%2f..%2fexamples%2fblog-starter%2fREADME HTTP/1.1`\nHost: target-host\n\nBecause Next.js App Router has `dynamicParams: true` by default and does not restrict dynamic routes solely to `generateStaticParams`, the server executes `Post({ params: { slug: '../../README' } })`, resolving `fullPath` to `_posts/../../README.md` and exposing local markdown/text files on the server.",
+    "snippet": "  const fullPath = join(postsDirectory, `${realSlug}.md`);\n  const fileContents = fs.readFileSync(fullPath, \"utf8\");",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 14,
+    "end_line": 15
+  }
+]

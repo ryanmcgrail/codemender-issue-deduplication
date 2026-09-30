@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "804d2011-2d60-5025-a52b-128dc59ce8c1",
+    "session_id": "ChBkMjE2NThiODk2ZmU3M2IzEAgaATAqBG1haW4",
+    "title": "Command Injection in Kubelet /logs API via Pattern Parameter on Windows",
+    "file_path": "/home/jfplante_google_com/repos/p18-kubernetes_rep1/pkg/kubelet/kubelet_server_journal_windows.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The Kubelet `/logs` endpoint on Windows nodes contains a command injection vulnerability due to insufficient sanitization/validation of the user-provided `pattern` query parameter. \n\nWhen a log query is made with a pattern, `newNodeLogQuery` in `pkg/kubelet/kubelet_server_journal.go` stores this query parameter in `nlq.Pattern`. The only validation performed on this string is a syntax check to ensure it is a valid regular expression:\n```go\nif _, err := syntax.Parse(n.Pattern, syntax.Perl); err != nil { ... }\n```\nThis check is insufficient as patterns containing single quotes, semicolons, and other script separators (e.g., `foo'; calc.exe; #`) are valid regular expressions.\n\nOn Windows, the `getLoggingCmd` function in `pkg/kubelet/kubelet_server_journal_windows.go` constructs a PowerShell command using string formatting:\n```go\npsCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n```\nThis string is then executed using `PowerShell.exe` with the `-Command` flag, which parses the string and executes it as code. Because the input single quotes are not escaped or removed, an attacker can break out of the single-quoted string context and inject arbitrary PowerShell command blocks.\n\nConceptual Exploit Payload:\nTo execute a command on the target Windows node, a user authorized to query the Kubelet `/logs` API can send a request to:\n`/logs?query=kubelet\u0026pattern=test%27%3b+Start-Process+calc.exe%3b+%23`\n\nThe generated PowerShell command will be parsed and executed as:\n`Get-WinEvent ... | Where-Object -Property Message -Match 'test'; Start-Process calc.exe; #' | ...`\nThis causes PowerShell to execute the `Start-Process calc.exe` command with system/kubelet privilege on the Windows host.",
+    "snippet": "\tif len(n.Pattern) \u003e 0 {\n\t\tpsCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n\t}",
+    "vuln_type": "Command Injection",
+    "vuln_id": "CWE-78",
+    "status": "OPEN",
+    "start_line": 59,
+    "end_line": 61
+  }
+]

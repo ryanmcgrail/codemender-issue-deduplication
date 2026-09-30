@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "0ad86d9a-fce2-5606-8eee-f0b74a9e82cd",
+    "SessionID": "ChAzZTE5ZWU1YmZjYmNkZTg5EAgaATAqBG1haW4",
+    "Title": "XSS via HTML Comment Escape Bypass in SSR Rendering",
+    "FilePath": "/home/jfplante_google_com/repos/p11-vue_rep2/packages/shared/src/escapeHtml.ts",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The Vue server-renderer (SSR) is vulnerable to Cross-Site Scripting (XSS) via HTML comment escape bypass when rendering dynamic `Comment` VNodes.\n\n### Taint Flow Analysis:\n1. **Source**: Untrusted user input is passed as children to a dynamic Comment VNode (e.g. `createCommentVNode(untrustedUserComment)` or `h(Comment, untrustedUserComment)`).\n2. **Sanitization/Validation**: In `packages/server-renderer/src/render.ts`, the `Comment` VNode's children are passed to `escapeHtmlComment(children as string)` which is defined in `packages/shared/src/escapeHtml.ts` as:\n   ```typescript\n   const commentStripRE = /^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$/g\n\n   export function escapeHtmlComment(src: string): string {\n     return src.replace(commentStripRE, '')\n   }\n   ```\n   This regex is insufficient and bypassable. Because `.replace(regex, '')` with a global regex only executes a single pass and is not recursive, an attacker can craft a payload such that a nested string matches the regex and gets stripped, while the outer remaining characters merge to reconstruct the forbidden comment closer sequence (`--\u003e` or `--!\u003e`).\n3. **Sink**: The bypassed output is directly injected into the raw HTML output buffer in `packages/server-renderer/src/render.ts` inside comments:\n   ```typescript\n   case Comment:\n     push(\n       children\n         ? `\u003c!--${escapeHtmlComment(children as string)}--\u003e`\n         : `\u003c!----\u003e`,\n     )\n     break\n   ```\n   The browser sees the comment closer, closes the comment block, and parses the remaining string as raw HTML, executing the injected `\u003cscript\u003e` tag.\n\n### Conceptual Exploit Payload:\nUsing the payload `----\u003e\u003e\u003cscript\u003ealert(1)\u003c/script\u003e`:\n- The input is `----\u003e\u003e\u003cscript\u003ealert(1)\u003c/script\u003e` (indices 0 to 4 is `----\u003e`, which contains `--\u003e`).\n- `src.replace(commentStripRE, '')` matches the inner `--\u003e` and strips it.\n- The remaining string components `--` (index 0, 1) and `\u003e\u003cscript\u003e...` merge, producing `--\u003e\u003cscript\u003ealert(1)\u003c/script\u003e`.\n- Inside the SSR HTML rendering, the output is `\u003c!--` + `--\u003e\u003cscript\u003ealert(1)\u003c/script\u003e` + `--\u003e` = `\u003c!----\u003e\u003cscript\u003ealert(1)\u003c/script\u003e--\u003e`.\n- The browser parses `\u003c!----\u003e` as an empty comment and executes `\u003cscript\u003ealert(1)\u003c/script\u003e`.\n\nSimilarly, using `--!--!\u003e\u003e\u003cscript\u003ealert(1)\u003c/script\u003e`, the inner `--!\u003e` gets stripped, and the outer components merge to `--!\u003e\u003cscript\u003ealert(1)\u003c/script\u003e`, which also closes the comment block in HTML5.",
+    "Snippet": "const commentStripRE = /^-?\u003e|\u003c!--|--\u003e|--!\u003e|\u003c!-$/g\n\nexport function escapeHtmlComment(src: string): string {\n  return src.replace(commentStripRE, '')\n}",
+    "VulnType": "Improper Output Handling",
+    "VulnID": "CWE-116",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 48,
+    "EndLine": 52,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

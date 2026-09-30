@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "7ca0310f",
+    "severity": "CRITICAL",
+    "vuln_type": "CWE-918",
+    "file_path": "packages/next/src/server/app-render/action-handler.ts",
+    "title": "Server-Side Request Forgery (SSRF) and Sensitive Header Leakage via Host / X-Forwarded-Host Header Poisoning in Server Actions",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side Request Forgery (SSRF) and Sensitive Header Leakage via Host / X-Forwarded-Host Header Poisoning in Server Actions",
+    "snippet": ""
+  }
+]

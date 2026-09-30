@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "666cc5ed-3963-5d8d-8d37-354ac956c907",
+    "SessionID": "ChA4ZGYxOGY4ZDU3NjgwNGY0EAgaATAqBG1haW4",
+    "Title": "Unsanitized User Input in RegExp Constructor (ReDoS/Arbitrary Cookie Read)",
+    "FilePath": "lib/helpers/cookies.js",
+    "Severity": "MEDIUM",
+    "Confidence": 85,
+    "Analysis": "In `lib/helpers/cookies.js`, the `read(name)` method parses `document.cookie` using a dynamically constructed `RegExp` built from the parameter `name`. Since `name` is taken directly from the user-controlled `xsrfCookieName` configuration options without escaping or validation, an attacker could supply a malicious regex pattern in `xsrfCookieName` (e.g., `xsrfCookieName = 'a|.*'`) to bypass intended cookies restrictions or cause RegExp Denial of Service (ReDoS) / Cookie injection. Additionally, this allows reading arbitrary cookies.\n\nConceptual Exploit Payload:\nSetting `axios.defaults.xsrfCookieName = 'SESSIONID|.*'` or a ReDoS pattern like `xsrfCookieName = '((a+)+)+'` to inject arbitrary regex syntax.",
+    "Snippet": "    read(name) {\n      const match = document.cookie.match(new RegExp('(^|;\\\\s*)(' + name + ')=([^;]*)'));\n      return (match ? decodeURIComponent(match[3]) : null);\n    },",
+    "VulnType": "Injection",
+    "VulnID": "CWE-400",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 22,
+    "EndLine": 26,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

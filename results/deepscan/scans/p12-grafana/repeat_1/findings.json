@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "3e6993d8-1da8-5742-86df-c2f763ab8d3e",
+    "session_id": "ChBjZDE4ZmM1YTIzZmE0NGEzEAgaATAqBG1haW4",
+    "title": "Path Traversal in PostgreSQL TLS Manager via DataSource UID",
+    "file_path": "/home/jfplante_google_com/repos/p12-grafana_rep1/pkg/tsdb/grafana-postgresql-datasource/tlsmanager.go",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `pkg/tsdb/grafana-postgresql-datasource/tlsmanager.go`, the `writeCertFiles` method constructs the working directory for TLS certificates by concatenating `dsInfo.UID` without sanitization or path containment checks:\n`workDir := filepath.Join(m.dataPath, \"tls\", dsInfo.UID+\"generatedTLSCerts\")`\n\nData Flow:\n1. Source: A user creates or updates a data source via `POST /api/datasources` or `PUT /api/datasources/:id`, supplying a custom `uid` field (e.g., `../../../../tmp/pwn/`).\n2. Sanitization/Validation: Although `store.go` calls `util.ValidateUID(cmd.UID)`, it only logs a deprecation warning via `logDeprecatedInvalidDsUid` without returning an error or rejecting the UID. Furthermore, `tlsmanager.go` does not check if the resolved path remains within `m.dataPath/tls`.\n3. Sink: `workDir` is passed to `os.MkdirAll(workDir, 0700)` at line 188 and certificate file paths (`root.crt`, `client.crt`, `client.key`) are resolved within `workDir`. Then `writeCertFileFunc` writes arbitrary user-provided certificate content to `generatedFilePath` via `os.WriteFile(generatedFilePath, []byte(fileContent), 0600)` at line 123 (or deletes files via `os.Remove` at line 139).\n\nConceptual Exploit Payload:\nCreate a PostgreSQL datasource with:\n```json\n{\n  \"name\": \"pg-exploit\",\n  \"type\": \"postgres\",\n  \"access\": \"proxy\",\n  \"uid\": \"../../../../tmp/exploit/\",\n  \"jsonData\": {\n    \"sslmode\": \"require\",\n    \"tlsConfigurationMethod\": \"file-content\"\n  },\n  \"secureJsonData\": {\n    \"tlsCACert\": \"malicious file content\"\n  }\n}\n```\nWhen a query or health check is executed against this datasource, `workDir` evaluates to `/tmp/exploit/generatedTLSCerts` and writes `/tmp/exploit/generatedTLSCerts/root.crt`.",
+    "snippet": "\t// Calculate all files path\n\tworkDir := filepath.Join(m.dataPath, \"tls\", dsInfo.UID+\"generatedTLSCerts\")\n\ttlsconfig.RootCertFile = getFileName(workDir, rootCert)\n\ttlsconfig.CertFile = getFileName(workDir, clientCert)\n\ttlsconfig.CertKeyFile = getFileName(workDir, clientKey)",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 155,
+    "end_line": 160
+  },
+  {
+    "finding_id": "b899c302-fa0c-5ec0-85ab-cb44dc4dcf25",
+    "session_id": "ChBjM2M2MWQ4OTM0OGY4MjU0EAgaATAqBG1haW4",
+    "title": "Prototype Pollution in groupingToMatrix Transformer",
+    "file_path": "/home/jfplante_google_com/repos/p12-grafana_rep1/packages/grafana-data/src/transformations/transformers/groupingToMatrix.ts",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "A Prototype Pollution vulnerability (CWE-1321) exists in the 'Grouping to Matrix' transformation in `packages/grafana-data/src/transformations/transformers/groupingToMatrix.ts`.\n\n### Data Flow Analysis\n1. **Source**: Untrusted data enters via DataFrame fields (`keyColumnField.values`, `keyRowField.values`, `valueField.values`). In Grafana, DataFrame values originate from queried data sources or panel definitions/dashboard JSON (e.g. imported dashboards or dashboard snapshots).\n2. **Sanitization/Validation**: There is no check or sanitization on `columnName`, `rowName`, or `value`. Furthermore, `matrixValues` is initialized as a plain JavaScript object literal `const matrixValues: { [key: string]: { [key: string]: unknown } } = {};` rather than a prototype-less object (`Object.create(null)`) or a `Map`.\n3. **Sink**: On lines 99-103:\n   ```typescript\n   if (!matrixValues[columnName]) {\n     matrixValues[columnName] = {};\n   }\n   matrixValues[columnName][rowName] = value;\n   ```\n   When `columnName` is `\"__proto__\"`, `matrixValues[\"__proto__\"]` evaluates to `Object.prototype`. Because `Object.prototype` is truthy, `!matrixValues[columnName]` evaluates to `false`, skipping initialization. Subsequently, `matrixValues[columnName][rowName] = value` resolves to `Object.prototype[rowName] = value`, polluting the prototype of all objects in the JavaScript execution environment.\n\n### Conceptual Exploit Payload\nA dashboard panel using the `groupingToMatrix` transformation is configured with a DataFrame where:\n- A column field contains the string value: `\"__proto__\"`\n- A row field contains the string value: `\"polluted\"` (or any property used in client-side templates / sanitizers / config objects)\n- The value field contains: `\"true\"` (or an arbitrary payload)\n\nWhen the transformation runs, `matrixValues[\"__proto__\"][\"polluted\"] = \"true\"` executes, polluting `Object.prototype.polluted = \"true\"` across the browser session.",
+    "snippet": "          if (!matrixValues[columnName]) {\n            matrixValues[columnName] = {};\n          }\n\n          matrixValues[columnName][rowName] = value;",
+    "vuln_type": "PROTOTYPE_POLLUTION",
+    "vuln_id": "CWE-1321",
+    "status": "OPEN",
+    "start_line": 99,
+    "end_line": 104
+  },
+  {
+    "finding_id": "0fd2a7e5-a9af-5a0b-bd7d-f9f6797898bb",
+    "session_id": "ChA3M2EwNWU1MDA4ZWM4YzE2EAgaATAqBG1haW4",
+    "title": "Prototype Pollution in state-timeline panel migration via unvalidated valueMap key",
+    "file_path": "/home/jfplante_google_com/repos/p12-grafana_rep1/public/app/plugins/panel/state-timeline/migrations.ts",
+    "severity": "MEDIUM",
+    "confidence": 90,
+    "analysis": "In `public/app/plugins/panel/state-timeline/migrations.ts`, `timelinePanelChangedHandler` handles migrating panel options from legacy panels (`natel-discrete-panel`).\n\nWhen processing `oldOptions.valueMaps`, the code iterates over user-controlled `valueMaps` entries:\n```typescript\nconst text: string = p.text;\nconst value: string = p.value;\nif (text \u0026\u0026 value) {\n  let old = valuemap.options[value];\n  if (old) {\n    old.text = text;\n  } else {\n    valuemap.options[value] = { text };\n  }\n}\n```\nBecause `valuemap.options` is initialized as an ordinary JavaScript object (`{}`), it inherits from `Object.prototype`. If an untrusted dashboard configuration contains an entry where `value` is `'__proto__'`, `valuemap.options[value]` resolves to `Object.prototype`. As `old` is truthy (`old === Object.prototype`), the branch `old.text = text` is executed, which directly writes `Object.prototype.text = text`. This pollutes `Object.prototype` across the entire application runtime.\n\nConceptual Exploit Payload:\nIn a dashboard panel JSON (or during panel migration/switch from `natel-discrete-panel`):\n```json\n{\n  \"type\": \"natel-discrete-panel\",\n  \"valueMaps\": [\n    {\n      \"value\": \"__proto__\",\n      \"text\": \"polluted\"\n    }\n  ]\n}\n```\nWhen this panel is converted to a `state-timeline` panel, `timelinePanelChangedHandler` will execute `valuemap.options['__proto__'].text = 'polluted'`, resulting in `({}).text === 'polluted'`, leading to prototype pollution that can be leveraged for client-side XSS or application logic bypass.",
+    "snippet": "          let old = valuemap.options[value];\n          if (old) {\n            old.text = text;\n          } else {\n            valuemap.options[value] = { text };\n          }",
+    "vuln_type": "Prototype Pollution",
+    "vuln_id": "CWE-1321",
+    "status": "OPEN",
+    "start_line": 49,
+    "end_line": 54
+  }
+]

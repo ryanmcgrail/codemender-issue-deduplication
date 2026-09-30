@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "618bb728-7c4f-564b-ae0a-2820fe801528",
+    "SessionID": "ChA1MzVjODVlYjVkZWMwMmYxEAgaATAqBG1haW4",
+    "Title": "Negative-Index Out-of-Bounds Read in basic_format_args::get(int id) via Legacy printf Integrations",
+    "FilePath": "include/fmt/core.h",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "A negative-index out-of-bounds read vulnerability exists in the dynamic format argument resolution logic of {fmt}.\n\n### Data Flow Trace\n1. **Source**: An untrusted format string is provided to legacy `printf`/`sprintf` formatting functions (e.g., `fmt::sprintf(\"%0$d\", 42)`).\n2. **Parsing**: The `parse_header` function in `include/fmt/printf.h` parses the explicit argument index `0` from `\"%0$d\"`.\n3. **Bypass of Validation**: In `include/fmt/printf.h`, `get_arg` decrements the 0-based argument index, changing it from `0` to `-1` (via `check_arg_id(--arg_index)`). Because `do_check_arg_id` only executes compile-time assertion/validation when `is_constant_evaluated()` is true, there is no runtime validation to reject this negative index.\n4. **Sink**: The index `-1` is passed to the public API `basic_format_args::get(int id)` in `include/fmt/core.h` at lines 1965-1976:\n   - When unpacked (`!is_packed()`), the check `id \u003c max_size()` (e.g., `-1 \u003c 20`) evaluates to `true`, and it executes `arg = args_[id]`, resulting in a negative-index out-of-bounds array access on the `args_` buffer (`args_[-1]`).\n   - When packed (`is_packed()`), the boundary check `id \u003e= detail::max_packed_args` evaluates to `false` (since `-1 \u003e= 15` is false), leading to undefined behavior shift operations (`shift = -4` inside `type(id)`) and a negative-index out-of-bounds array access on `values_[-1]`.\n\n### Conceptual Exploit Payload\nA user passes the format string `\"%0$d\"` to `fmt::sprintf`:\n```cpp\nfmt::sprintf(\"%0$d\", 42);\n```\nThis forces `get_arg` to resolve argument index `-1` and propagates directly to `args_.get(-1)`, leading to a negative-index out-of-bounds read.",
+    "Snippet": "  FMT_CONSTEXPR auto get(int id) const -\u003e format_arg {\n    format_arg arg;\n    if (!is_packed()) {\n      if (id \u003c max_size()) arg = args_[id];\n      return arg;\n    }\n    if (id \u003e= detail::max_packed_args) return arg;\n    arg.type_ = type(id);\n    if (arg.type_ == detail::type::none_type) return arg;\n    arg.value_ = values_[id];\n    return arg;\n  }",
+    "VulnType": "CWE-125",
+    "VulnID": "CWE-125",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 1965,
+    "EndLine": 1976,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

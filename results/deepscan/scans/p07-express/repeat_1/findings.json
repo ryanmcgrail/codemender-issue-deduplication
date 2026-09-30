@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "f2046bfc-e954-5e9d-a09f-8fad4ea6ba65",
+    "session_id": "ChBkZGFhZTg5ZTYzNTIyMzM0EAgaATAqBG1haW4",
+    "title": "Reflected Cross-Site Scripting (XSS) via unescaped route parameter in vhost example",
+    "file_path": "/home/jfplante_google_com/repos/p07-express_rep1/examples/vhost/index.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In `examples/vhost/index.js`, the route handler for `main.get('/:sub', ...)` extracts the route parameter `req.params.sub` and directly reflects it back to the client using `res.send('requested ' + req.params.sub)`. \n\nData Flow:\n- **Source**: Untrusted URL path parameter `:sub` accessed via `req.params.sub`, which is automatically URL-decoded by Express's router (`decode_param`).\n- **Sanitization/Validation**: None. The parameter is concatenated directly into the response without HTML encoding or input sanitization.\n- **Sink**: `res.send(...)`, which defaults to sending the response with `Content-Type: text/html; charset=utf-8` when provided a string argument.\n\nConceptual Exploit Payload:\nA victim visiting the following URL will execute arbitrary JavaScript in the context of the application:\n```http\nGET /%3Cscript%3Ealert(document.domain)%3C%2Fscript%3E HTTP/1.1\nHost: example.com:3000\n```\nResponse:\n```http\nHTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n\nrequested \u003cscript\u003ealert(document.domain)\u003c/script\u003e\n```",
+    "snippet": "main.get('/:sub', function(req, res){\\n  res.send('requested ' + req.params.sub);\\n});",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 29,
+    "end_line": 31
+  },
+  {
+    "finding_id": "18dc442d-58da-5ffc-8053-3e2075564b57",
+    "session_id": "ChBmMzU1Yzk2ZjczZWVmYzA3EAgaATAqBG1haW4",
+    "title": "Stored Cross-Site Scripting (XSS) via User-Agent Header",
+    "file_path": "/home/jfplante_google_com/repos/p07-express_rep1/examples/online/index.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data flow trace:\n- Source: Untrusted HTTP request header `req.headers['user-agent']` captured in `app.use(function(req, res, next) { online.add(req.headers['user-agent']); next(); });` (line 32).\n- Sanitization/Validation: None. The `User-Agent` string is stored as-is without any validation, sanitization, or HTML entity escaping.\n- Sink: In `app.get('/', ...)`, `online.last(5, ...)` retrieves the user IDs (User-Agent strings) and passes them to `list(ids)` which builds raw HTML string `\u003cli\u003e' + id + '\u003c/li\u003e` without HTML encoding. The result is then directly sent to the client via `res.send()` at line 53, resulting in Stored Cross-Site Scripting (XSS).\n\nConceptual Exploit Payload:\nSend an HTTP request with an XSS vector in the `User-Agent` header:\n```http\nGET / HTTP/1.1\nHost: localhost:3000\nUser-Agent: \u003cscript\u003ealert(document.domain)\u003c/script\u003e\n```\nWhen any user navigates to `GET /`, the response body renders:\n```html\n\u003cp\u003eUsers online: 1\u003c/p\u003e\u003cul\u003e\u003cli\u003e\u003cscript\u003ealert(document.domain)\u003c/script\u003e\u003c/li\u003e\u003c/ul\u003e\n```\ncausing malicious JavaScript execution in the context of the user's session.",
+    "snippet": "    res.send('\u003cp\u003eUsers online: ' + ids.length + '\u003c/p\u003e' + list(ids));",
+    "vuln_type": "CWE-79",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 53,
+    "end_line": 53
+  }
+]

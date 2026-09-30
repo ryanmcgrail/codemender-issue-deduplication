@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "916592f5-dc35-5795-b697-eb28a9ca3175",
+    "SessionID": "ChBkZmUxMzlmY2RlMjdkNzVhEAgaATAqBG1haW4",
+    "Title": "Insecure Deserialization via pickle in fetch_20newsgroups caching",
+    "FilePath": "sklearn/datasets/_twenty_newsgroups.py",
+    "Severity": "MEDIUM",
+    "Confidence": 85,
+    "Analysis": "The `twenty_newsgroups` dataset fetcher (`fetch_20newsgroups`) caches the dataset as a zipped pickle file. In `sklearn/datasets/_twenty_newsgroups.py`, lines 307-310 load the cache file if it exists using `pickle.loads` on the decompressed content of the file.\n\nSince the cache path is located in the user's `data_home` (typically `~/scikit_learn_data/20news-bydate.pkz`), an attacker who can write to this location, or who tricks a user/service into using a malicious cache directory or a malicious PKZ file, can achieve Arbitrary Code Execution (ACE) via pickle deserialization.\n\nData Flow:\n1. Source: Local cached file `20news-bydate.pkz` at `cache_path = _pkl_filepath(data_home, CACHE_NAME)` (lines 302, 307).\n2. Sanitization/Validation: None. The file content is read and passed directly to `codecs.decode(..., \"zlib_codec\")` and then to `pickle.loads`.\n3. Sink: `pickle.loads(uncompressed_content)` (line 310).\n\nConceptual Exploit Payload:\nCreate a malicious `20news-bydate.pkz` file:\n```python\nimport pickle, codecs\nclass Exploit(object):\n    def __reduce__(self):\n        import os\n        return (os.system, ('id',))\n\npayload = codecs.encode(pickle.dumps(Exploit()), \"zlib_codec\")\nwith open(\"20news-bydate.pkz\", \"wb\") as f:\n    f.write(payload)\n```\nPlacing this file in `~/scikit_learn_data/20news-bydate.pkz` and executing `sklearn.datasets.fetch_20newsgroups()` triggers arbitrary command execution.",
+    "Snippet": "            with open(cache_path, \"rb\") as f:\n                compressed_content = f.read()\n            uncompressed_content = codecs.decode(compressed_content, \"zlib_codec\")\n            cache = pickle.loads(uncompressed_content)",
+    "VulnType": "Code Injection",
+    "VulnID": "CWE-502",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 307,
+    "EndLine": 310,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

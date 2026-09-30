@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "a1f75154",
+    "severity": "MEDIUM",
+    "vuln_type": "NULL Pointer Dereference",
+    "file_path": "include/fmt/printf.h",
+    "title": "NULL Pointer Dereference in printf C-String Precision Handling",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "NULL Pointer Dereference in printf C-String Precision Handling",
+    "snippet": ""
+  },
+  {
+    "finding_id": "87f84a5d",
+    "severity": "HIGH",
+    "vuln_type": "Command Injection",
+    "file_path": "include/fmt/os.h",
+    "title": "OS Command Injection in say() via std::system",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "OS Command Injection in say() via std::system",
+    "snippet": ""
+  }
+]

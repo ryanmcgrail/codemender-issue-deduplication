@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "dfbc7329",
+    "severity": "HIGH",
+    "vuln_type": "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+    "file_path": "torch_geometric/data/extract.py",
+    "title": "Path Traversal (Zip Slip / Tar Slip) in Archive Extraction Functions",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Path Traversal (Zip Slip / Tar Slip) in Archive Extraction Functions",
+    "snippet": ""
+  },
+  {
+    "finding_id": "f1ea7a4a",
+    "severity": "MEDIUM",
+    "vuln_type": "CWE-295: Improper Certificate Validation",
+    "file_path": "torch_geometric/data/download.py",
+    "title": "Disabled SSL Certificate Verification in download_url",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Disabled SSL Certificate Verification in download_url",
+    "snippet": ""
+  }
+]

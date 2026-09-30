@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "a1f75154-5bac-57d6-9fe5-0f849f093cab",
+    "session_id": "ChBlYjNlZmVlYzBjYjEwOGNmEAgaATAqBG1haW4",
+    "title": "NULL Pointer Dereference in vprintf When Formatting Null C-String with Precision",
+    "file_path": "/home/jfplante_google_com/repos/h12-fmt_rep1/include/fmt/printf.h",
+    "severity": "MEDIUM",
+    "confidence": 100,
+    "analysis": "A NULL pointer dereference vulnerability exists in `fmt::vprintf` (and public wrapper functions such as `fmt::sprintf`, `fmt::printf`, `fmt::fprintf`, and `fmt::vsprintf`) in `include/fmt/printf.h`.\n\nWhen formatting a C-string argument with a specified precision (e.g., `fmt::sprintf(\"%.5s\", (const char*)nullptr)` or `fmt::sprintf(\"%.*s\", 5, (const char*)nullptr)`):\n1. **Source**: An untrusted or optional input that resolves to `(const char*)nullptr` or `(const wchar_t*)nullptr` is passed along with a precision format specifier.\n2. **Data Path**:\n   - The precision is parsed, setting `specs.precision \u003e= 0`.\n   - `get_arg(arg_index)` retrieves the argument whose type is `type::cstring_type`.\n   - The conditional block at lines 481-488 is entered:\n     ```cpp\n     if (specs.precision \u003e= 0 \u0026\u0026 arg.type() == type::cstring_type) {\n       auto str = visit_format_arg(get_cstring\u003cChar\u003e(), arg);\n       auto str_end = str + specs.precision;\n       auto nul = std::find(str, str_end, Char());\n       auto sv = basic_string_view\u003cChar\u003e(\n           str, to_unsigned(nul != str_end ? nul - str : specs.precision));\n       arg = make_arg\u003cbasic_printf_context\u003cChar\u003e\u003e(sv);\n     }\n     ```\n   - `visit_format_arg(get_cstring\u003cChar\u003e(), arg)` returns `str = nullptr`.\n   - Undefined behavior occurs when computing `str + specs.precision` (pointer arithmetic on `nullptr`).\n   - `std::find(str, str_end, Char())` is invoked with `str == nullptr`, which immediately attempts to dereference `str` (`*str`).\n3. **Sink**: `std::find(str, str_end, Char())` dereferences the NULL pointer at address 0.\n4. **Validation/Sanitization**:\n   While `printf_arg_formatter` (line 283) explicitly checks `if (value)` to safely write `\"(null)\"` for null C-strings when no precision is specified (e.g. `%s`), lines 481-488 lack any check for `str == nullptr`.\n5. **Conceptual Exploit Payload**:\n   ```cpp\n   #include \u003cfmt/printf.h\u003e\n\n   int main() {\n       // Passing a null pointer with precision crashes the process with SIGSEGV:\n       fmt::sprintf(\"%.5s\", static_cast\u003cconst char*\u003e(nullptr));\n       // Alternatively with dynamic precision:\n       // fmt::sprintf(\"%.*s\", 10, static_cast\u003cconst char*\u003e(nullptr));\n       return 0;\n   }\n   ```\n   Executing this causes an immediate segmentation fault (Denial of Service).",
+    "snippet": "    if (specs.precision \u003e= 0 \u0026\u0026 arg.type() == type::cstring_type) {\n      auto str = visit_format_arg(get_cstring\u003cChar\u003e(), arg);\n      auto str_end = str + specs.precision;\n      auto nul = std::find(str, str_end, Char());\n      auto sv = basic_string_view\u003cChar\u003e(\n          str, to_unsigned(nul != str_end ? nul - str : specs.precision));\n      arg = make_arg\u003cbasic_printf_context\u003cChar\u003e\u003e(sv);\n    }",
+    "vuln_type": "NULL Pointer Dereference",
+    "vuln_id": "CWE-476",
+    "status": "OPEN",
+    "start_line": 481,
+    "end_line": 488
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "finding_id": "9622e64d",
+    "severity": "CRITICAL",
+    "vuln_type": "SQL Injection",
+    "file_path": "routes/search.ts",
+    "title": "SQL Injection in Product Search via 'q' Query Parameter",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "SQL Injection in Product Search via 'q' Query Parameter",
+    "snippet": ""
+  },
+  {
+    "finding_id": "93aaf4bc",
+    "severity": "CRITICAL",
+    "vuln_type": "SQL Injection",
+    "file_path": "routes/login.ts",
+    "title": "SQL Injection Authentication Bypass in Login Handler",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "SQL Injection Authentication Bypass in Login Handler",
+    "snippet": ""
+  },
+  {
+    "finding_id": "d5a34aaf",
+    "severity": "CRITICAL",
+    "vuln_type": "Code Injection",
+    "file_path": "routes/b2bOrder.ts",
+    "title": "Remote Code Execution via Sandboxed Eval in B2B Order Handler",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Remote Code Execution via Sandboxed Eval in B2B Order Handler",
+    "snippet": ""
+  },
+  {
+    "finding_id": "0c1e782f",
+    "severity": "CRITICAL",
+    "vuln_type": "Code Injection",
+    "file_path": "routes/userProfile.ts",
+    "title": "Server-Side Code Injection (SSTI / eval) in User Profile Rendering",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side Code Injection (SSTI / eval) in User Profile Rendering",
+    "snippet": ""
+  },
+  {
+    "finding_id": "968bae93",
+    "severity": "HIGH",
+    "vuln_type": "XML External Entity (XXE) Injection",
+    "file_path": "routes/fileUpload.ts",
+    "title": "XML External Entity (XXE) Injection in File Upload",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "XML External Entity (XXE) Injection in File Upload",
+    "snippet": ""
+  },
+  {
+    "finding_id": "26c1aa6b",
+    "severity": "HIGH",
+    "vuln_type": "Path Traversal",
+    "file_path": "routes/fileUpload.ts",
+    "title": "Arbitrary File Overwrite via Path Traversal in Zip File Upload (Zip Slip)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary File Overwrite via Path Traversal in Zip File Upload (Zip Slip)",
+    "snippet": ""
+  },
+  {
+    "finding_id": "10fc2a61",
+    "severity": "HIGH",
+    "vuln_type": "Server-Side Request Forgery (SSRF)",
+    "file_path": "routes/profileImageUrlUpload.ts",
+    "title": "Server-Side Request Forgery (SSRF) in Profile Image URL Upload",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Server-Side Request Forgery (SSRF) in Profile Image URL Upload",
+    "snippet": ""
+  },
+  {
+    "finding_id": "ff63b5e4",
+    "severity": "MEDIUM",
+    "vuln_type": "Open Redirect",
+    "file_path": "lib/insecurity.ts",
+    "title": "Open Redirect via Insufficient URL Validation",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Open Redirect via Insufficient URL Validation",
+    "snippet": ""
+  },
+  {
+    "finding_id": "a4f45451",
+    "severity": "HIGH",
+    "vuln_type": "NoSQL Injection",
+    "file_path": "routes/trackOrder.ts",
+    "title": "NoSQL Injection / JavaScript Code Injection in Order Tracking via '$where'",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "NoSQL Injection / JavaScript Code Injection in Order Tracking via '$where'",
+    "snippet": ""
+  },
+  {
+    "finding_id": "39a0523d",
+    "severity": "HIGH",
+    "vuln_type": "Path Traversal",
+    "file_path": "routes/dataErasure.ts",
+    "title": "Local File Inclusion / Arbitrary File Read in Data Erasure Layout Handler",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Local File Inclusion / Arbitrary File Read in Data Erasure Layout Handler",
+    "snippet": ""
+  }
+]

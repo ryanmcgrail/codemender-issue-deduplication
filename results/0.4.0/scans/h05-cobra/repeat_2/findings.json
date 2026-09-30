@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "16209b38-cff2-5263-b72c-c2c744eee554",
+    "SessionID": "ChAyODNiY2M5YTZiYzc3MTdlEAgaATAqBG1haW4",
+    "Title": "Arbitrary Command Execution / Code Injection via Invoke-Expression in Generated PowerShell Completion Script",
+    "FilePath": "/home/jfplante_google_com/repos/h05-cobra_rep2/powershell_completions.go",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In `powershell_completions.go` at line 129, the generated PowerShell completion script uses `Invoke-Expression` (which is equivalent to `eval` in PowerShell) to request completions. The variable `$RequestComp` contains command-line arguments that are directly obtained from the user's input/truncated command line. Since PowerShell completion triggers automatically or upon pressing `Tab`, an untrusted command or argument containing PowerShell injection sequences (such as `; \u003carbitrary command\u003e` or `$(...)` or backticks) can be injected into the input. When a user tries to autocomplete a command containing such a payload, the generated script evaluates `$RequestComp` using `Invoke-Expression`, leading to arbitrary command execution on the user's machine.\n\n**Conceptual Exploit Payload**:\nIf a user is typing a command using a Cobra-based CLI that has PowerShell completion enabled, and they type or paste an argument containing a PowerShell command subexpression:\n`program_name \"; Start-Process calc.exe # \"`\nWhen they hit `\u003cTAB\u003e` to trigger completion, the PowerShell completion engine executes the registered scriptblock. Inside the scriptblock:\n1. `$CommandAst.CommandElements` contains the command line, including the injected command: `; Start-Process calc.exe # `.\n2. This is formatted into `$RequestComp` as:\n   `$RequestComp = \"program_name __complete ; Start-Process calc.exe # \"`\n3. The scriptblock then executes:\n   `Invoke-Expression -OutVariable out \"$RequestComp\" 2\u003e\u00261 | Out-Null`\n4. This results in the execution of `Start-Process calc.exe` with the user's privileges.",
+    "Snippet": "    #call the command store the output in $out and redirect stderr and stdout to null\n    # $Out is an array contains each line per element\n    Invoke-Expression -OutVariable out \"$RequestComp\" 2\u003e\u00261 | Out-Null",
+    "VulnType": "CWE-94",
+    "VulnID": "CWE-94",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 127,
+    "EndLine": 130,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

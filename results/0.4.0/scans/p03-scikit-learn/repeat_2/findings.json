@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "b6b0720f-6d28-560f-affd-96c90367f401",
+    "SessionID": "ChA4NTk5NDdlNTMxZDkxNzMxEAgaATAqBG1haW4",
+    "Title": "Path Traversal in fetch_openml leading to Arbitrary Directory/File Creation",
+    "FilePath": "/home/jfplante_google_com/repos/p03-scikit-learn_rep2/sklearn/datasets/_openml.py",
+    "Severity": "HIGH",
+    "Confidence": 95,
+    "Analysis": "The `fetch_openml` function takes a `name` argument from untrusted user input and uses it to construct a URL. This URL is then passed as `openml_path` to `_open_openml_url`, which resolves it to a local cache file path using `_get_local_path`.\nSpecifically, `_get_local_path` constructs the local path by combining `data_home` and the `openml_path` via `os.path.join`:\n```python\ndef _get_local_path(openml_path: str, data_home: str) -\u003e str:\n    return os.path.join(data_home, \"openml.org\", openml_path + \".gz\")\n```\nBecause the `name` argument is not sanitized to remove relative directory traversal sequences (such as `../`), `openml_path` (which includes `name`) can contain arbitrary parent directory traversal segments. When passed to `os.path.join`, these traversal segments escape the `data_home` directory boundary.\nThen, `_open_openml_url` creates directories at the traversed location:\n```python\n    local_path = _get_local_path(openml_path, data_home)\n    dir_name, file_name = os.path.split(local_path)\n    if not os.path.exists(local_path):\n        os.makedirs(dir_name, exist_ok=True)\n```\nThis leads to an arbitrary directory creation vulnerability, and can also potential lead to arbitrary file creation/overwrite if the API request succeeds.\n\n**Conceptual Exploit Payload:**\nAn attacker can invoke:\n```python\nfrom sklearn.datasets import fetch_openml\nfetch_openml(name=\"../../../../../../../tmp/evil_dir/dummy\")\n```\nThis will result in:\n1. `name` being formatted into the URL `api/v1/json/data/list/data_name/../../../../../../../tmp/evil_dir/dummy/limit/2/status/active/`.\n2. `_get_local_path` resolving this URL to `/tmp/evil_dir/dummy/limit/2/status/active/.gz` (assuming `data_home` is under `/home/user/scikit_learn_data/openml`).\n3. `os.makedirs(\"/tmp/evil_dir/dummy/limit/2/status/active/\", exist_ok=True)` being executed, successfully creating the directory `/tmp/evil_dir/dummy/limit/2/status/active/` on the local file system.",
+    "Snippet": "def _get_local_path(openml_path: str, data_home: str) -\u003e str:\n    return os.path.join(data_home, \"openml.org\", openml_path + \".gz\")",
+    "VulnType": "Path Traversal",
+    "VulnID": "CWE-22",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 43,
+    "EndLine": 44,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

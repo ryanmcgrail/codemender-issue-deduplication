@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "0c96ea95-8ab1-57a6-80b5-58026191ab46",
+    "session_id": "ChAxMmRlOGE5MmJmODcxODc2EAgaATAqBG1haW4",
+    "title": "Broken Access Control in Requests Trace Viewer Exposes File Traces via Substring Username Matching",
+    "file_path": "/home/jfplante_google_com/repos/o02-webgoat_pr/src/main/java/org/owasp/webgoat/webwolf/requests/Requests.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "### Trace Data Path:\n- **Source**: Untrusted HTTP requests sent to WebWolf (e.g., from other users or automated backend tasks in a shared classroom environment) are recorded by `WebWolfTraceRepository.add()`. In this PR, `WebWolfTraceRepository` changed the exclusion for `/files` from `contains(\"/files\")` to `endsWith(\"/files\")`, causing all requests to uploaded files under `/files/{user}/{filename}` to be recorded into `traces`. Authenticated users subsequently request `GET /requests` to view recorded traces.\n- **Sanitization/Validation**: In `Requests.java`, the `allowedTrace(HttpExchange t, String username)` method is intended to prevent users from seeing traces belonging to other students in a shared environment:\n  ```java\n  if (req.getUri().getPath().contains(\"/files\") \u0026\u0026 !req.getUri().getPath().contains(username)) {\n      allowed = false;\n  }\n  ```\n  This validation is fundamentally flawed because it performs a loose substring search (`path.contains(username)`) rather than validating that the path matches the authenticated user's designated directory (`/files/{username}/...`).\n- **Sink**: `toJsonString(t)` serializes the entire `HttpExchange` object—including HTTP request/response headers, `Cookie: WEBWOLFSESSION=...`, request URI, and timestamps—and adds it to the `traces` model attribute rendered in `requests.html` with unescaped text (`th:utext`).\n\n### Conceptual Exploit Payload:\n1. An attacker creates an account with the username `files` (or `WebWolf`, matching the servlet context path) via `/registration`. The registration logic enforces no blacklist or format restriction on usernames.\n2. A victim user uploads or requests a sensitive file, e.g., `GET /files/victim_student/solution.dtd` or `GET /files/victim_student/secret.txt`, sending their session cookie `WEBWOLFSESSION=xyz`.\n3. Because the URI does not end with `/files`, `WebWolfTraceRepository` records the request into `traces`.\n4. The attacker logs in as `files` and navigates to `GET /requests`:\n   - `Requests.get()` executes `allowedTrace(t, \"files\")`.\n   - `req.getUri().getPath().contains(\"/files\")` is `true`.\n   - `!req.getUri().getPath().contains(\"files\")` evaluates to `false` because the path starts with `/files`.\n   - Consequently, `allowed` remains `true`.\n5. The attacker is able to observe all file access traces from all users, exposing sensitive session tokens, file names, and request metadata.",
+    "snippet": "    var traces =\n        traceRepository.findAll().stream()\n            .filter(t -\u003e allowedTrace(t, username))\n            .map(t -\u003e new Tracert(t.getTimestamp(), path(t), toJsonString(t)))\n            .toList();\n    model.addObject(\"traces\", traces);",
+    "vuln_type": "Incorrect Authorization",
+    "vuln_id": "CWE-863",
+    "status": "OPEN",
+    "start_line": 67,
+    "end_line": 72
+  }
+]

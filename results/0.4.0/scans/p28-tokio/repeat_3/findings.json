@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "057451ab-88ff-59d1-b631-1c83409db095",
+    "SessionID": "ChBjNGZmODFhZTkzZWVlYmZlEAgaATAqBG1haW4",
+    "Title": "Unsound unconditional Sync implementation for ReusableBoxFuture",
+    "FilePath": "/home/jfplante_google_com/repos/p28-tokio_rep3/tokio-util/src/sync/reusable_box.rs",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The `ReusableBoxFuture` type in `tokio-util` contains an unsound `unsafe impl\u003cT\u003e Sync for ReusableBoxFuture\u003c'_, T\u003e {}` without requiring `T: Sync` or even `T: Send`.\nSince a `ReusableBoxFuture` holds a pinned box of a `Future\u003cOutput = T\u003e + Send`, making `ReusableBoxFuture` implement `Sync` unconditionally allows multi-threaded shared access to the future inside.\nIf multiple threads attempt to poll or otherwise access/mutate state via the `poll` method of `ReusableBoxFuture` simultaneously (or access the inner future through shared references, if any are exposed), it can result in a data race / undefined behavior, especially if the underlying future `F` is not `Sync`.\nAlthough `poll` takes `\u0026mut self` or `Pin\u003c\u0026mut Self\u003e`, a `Sync` type can be shared between threads via `\u0026ReusableBoxFuture`. While the `Future` trait's `poll` requires a mutable reference, other wrappers or APIs might share a `\u0026ReusableBoxFuture` (or the `Sync` implementation might allow sending references `\u0026ReusableBoxFuture` across thread boundaries to be accessed from multiple threads). More importantly, `Sync` for `ReusableBoxFuture\u003cT\u003e` implies that `\u0026ReusableBoxFuture\u003cT\u003e` is `Send`, which can lead to unsoundness under Rust's concurrency model if the underlying future is not `Sync`.\nFor example, if `T` (the output) is not `Send` or `Sync`, or if the underlying future `F` is not `Sync`, implementing `Sync` for `ReusableBoxFuture` allows sharing the future between threads, bypassing the safety requirements of Rust's thread-safety model.\n\nSpecifically:\n- Line 93: `unsafe impl\u003cT\u003e Sync for ReusableBoxFuture\u003c'_, T\u003e {}` is implemented unconditionally.\n\nConceptual Exploit/Unsoundness Proof:\nAn attacker/programmer could construct a non-`Sync` future (such as one wrapping a `Cell` or `Rc`) and wrap it in `ReusableBoxFuture`. Because `ReusableBoxFuture` unconditionally implements `Sync`, it can be put in an `Arc` and shared across threads. Multiple threads can then poll the future via `ReusableBoxFuture::poll` (or access/mutate the non-`Sync` types wrapped inside), causing data races, memory corruption, or undefined behavior.",
+    "Snippet": "unsafe impl\u003cT\u003e Sync for ReusableBoxFuture\u003c'_, T\u003e {}",
+    "VulnType": "Race Condition / Unsound Concurrency",
+    "VulnID": "CWE-343",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 93,
+    "EndLine": 93,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "2e4410ca-082e-5977-a6f7-7f4209c4da54",
+    "SessionID": "ChBmODFmZGUwNGZlMmE1NTk0EAgaATAqBG1haW4",
+    "Title": "Insecure Temporary File and Race Condition in HeapDumpWebEndpoint",
+    "FilePath": "/home/jfplante_google_com/repos/p20-spring-boot_rep3/spring-boot-project/spring-boot-actuator/src/main/java/org/springframework/boot/actuate/management/HeapDumpWebEndpoint.java",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "An untrusted user triggers a heap dump via a HTTP GET request to `/actuator/heapdump`. The `HeapDumpWebEndpoint` uses the legacy `java.io.File.createTempFile` API in the shared temporary directory (e.g. `/tmp` on Linux), which creates files with permissions governed by the system default umask (often allowing world-readability) or JVM defaults. More critically, the method calls `file.delete()` immediately after creation to allow the HotSpot MXBean to write to the path (which fails if the file already exists). This introduces a Time-Of-Check to Time-Of-Use (TOCTOU) race condition / symlink vulnerability: a local attacker can monitor the directory, detect the temporary filename, and create a symlink or pre-create the file before the Hotspot MXBean writes the heap dump, leading to arbitrary file write / overwrite or leakage of sensitive heap dump information.\n\n### Conceptual Exploit Payload:\n1. The attacker monitors `/tmp` for new `heap-*.hprof` files using tools like `inotifywait`.\n2. The attacker requests a heap dump:\n   ```http\n   GET /actuator/heapdump HTTP/1.1\n   Host: target-server\n   ```\n3. The server calls `File.createTempFile`, generating `/tmp/heap-2026-08-21-15-40-123456.hprof` and then deletes it.\n4. The attacker immediately creates a symlink at `/tmp/heap-2026-08-21-15-40-123456.hprof` pointing to `/etc/shadow` or another target file:\n   ```bash\n   ln -s /etc/shadow /tmp/heap-2026-08-21-15-40-123456.hprof\n   ```\n5. The HotSpot MXBean writes the heap dump to the target path, overwriting it.",
+    "Snippet": "\t\tprivate File createTempFile() throws IOException {\n\t\t\tString date = DateTimeFormatter.ofPattern(\"yyyy-MM-dd-HH-mm\").format(LocalDateTime.now());\n\t\t\tFile file = File.createTempFile(\"heap-\" + date, \".hprof\");\n\t\t\tfile.delete();\n\t\t\treturn file;\n\t\t}",
+    "VulnType": "CWE-377",
+    "VulnID": "CWE-377",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 176,
+    "EndLine": 181,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

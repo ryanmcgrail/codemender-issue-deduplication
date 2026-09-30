@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "f8c77398-86e4-5185-883b-a6a02ec21aa7",
+    "SessionID": "ChBkMzgyZWM3ODdhNzQ5ZTEzEAgaATAqBG1haW4",
+    "Title": "Insecure XML Parsing / Potential XML External Entity (XXE) Injection in XmlHandlers",
+    "FilePath": "Dapper/XmlHandlers.cs",
+    "Severity": "MEDIUM",
+    "Confidence": 75,
+    "Analysis": "The `XmlDocumentHandler` implements XML parsing from database query results using `XmlDocument.LoadXml(xml)` (line 21 of `Dapper/XmlHandlers.cs`). In .NET Framework, .NET Core, and modern .NET, `XmlDocument` by default may be vulnerable to XML External Entity (XXE) injection or XML Entity Expansion attacks depending on the environment, target framework, and execution context.\n\nSpecifically, in .NET Framework prior to 4.5 or in custom contexts, `XmlResolver` is not securely set by default, permitting the resolution of external entities. Even on .NET Core, if external entities are parsed without explicit restrictions or if custom configuration is expected, relying on `XmlDocument.LoadXml` directly without safe `XmlReader` settings or a customized `XmlReader` represents an insecure parsing pattern for untrusted XML payloads returned from the database or dynamically mapped through queries.\n\nSimilarly, `XDocument.Parse` and `XElement.Parse` in `XDocumentHandler` and `XElementHandler` can be susceptible to Denial of Service (DoS) through Billion Laughs / entity expansion attacks if a large/nested XML payload is retrieved from a database.\n\n**Conceptual Exploit Payload:**\nAn attacker who can control/inject the XML string returned from a database query (e.g., via SQL injection, or a malicious database record) could inject a malicious XML payload with an external entity reference:\n\n```xml\n\u003c!DOCTYPE foo [\n  \u003c!ELEMENT foo ANY \u003e\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\" \u003e]\u003e\n\u003cfoo\u003e\u0026xxe;\u003c/foo\u003e\n```\n\nWhen Dapper deserializes this column into an `XmlDocument`, `XDocument`, or `XElement` field, it parses the XML string using `XmlDocument.LoadXml` or `XDocument/XElement.Parse`, potentially triggering the XXE payload to read local files, execute SSRF, or cause a denial of service (DoS) via entity expansion.",
+    "Snippet": "    internal sealed class XmlDocumentHandler : XmlTypeHandler\u003cXmlDocument\u003e\n    {\n        protected override XmlDocument Parse(string xml)\n        {\n            var doc = new XmlDocument();\n            doc.LoadXml(xml);\n            return doc;\n        }\n\n        protected override string Format(XmlDocument xml) =\u003e xml.OuterXml;\n    }",
+    "VulnType": "CWE-611",
+    "VulnID": "CWE-611",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 16,
+    "EndLine": 26,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "e0d4191d-1f85-5f6d-a8db-8af4d74f4d6b",
+    "SessionID": "ChBkMDEyNDk4ZTM2ZTNhYjRkEAgaATAqBG1haW4",
+    "Title": "PowerShell Command Injection in Kubelet Log Query on Windows Nodes (CVE-2023-39343 / CVE-2023-2723 style)",
+    "FilePath": "/home/jfplante_google_com/repos/p18-kubernetes_rep3/pkg/kubelet/kubelet_server_journal_windows.go",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The kubelet's node log query mechanism on Windows is vulnerable to PowerShell command injection. When querying service logs via the `/proxy/logs` endpoint, the `pattern` query parameter is processed by `nodeLogQuery.Pattern`. In `pkg/kubelet/kubelet_server_journal_windows.go`, `getLoggingCmd` constructs a PowerShell command using string formatting:\n\n```go\nif len(n.Pattern) \u003e 0 {\n    psCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n}\n```\n\nThe validation of `n.Pattern` in `nodeLogQuery.validate()` only checks if the pattern is a syntactically valid Perl regular expression using `syntax.Parse(n.Pattern, syntax.Perl)`. Since a regular expression can easily contain single quotes and semicolons while remaining syntactically valid (e.g., `.*'; \u003carbitrary PowerShell command\u003e; '`), an attacker with privileges to query node logs can inject and execute arbitrary PowerShell commands on the Windows node.\n\nConceptual Exploit Payload:\nAn attacker sends a GET request to the kubelet's logs endpoint on a Windows node:\n`/logs/?query=kubelet\u0026pattern=.*%27%3b+Start-Process+calc%3b+%27`\n\nThis URL decodes to the pattern `.*'; Start-Process calc; '`.\nThe resulting PowerShell command executed by the kubelet is:\n`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='kubelet'} | Sort-Object TimeCreated | Where-Object -Property Message -Match '.*'; Start-Process calc; '' | Format-Table -AutoSize -Wrap`\n\nThis runs `Start-Process calc` under the context of the kubelet service on the Windows node.",
+    "Snippet": "\tif len(n.Pattern) \u003e 0 {\n\t\tpsCmd += fmt.Sprintf(\" | Where-Object -Property Message -Match '%s'\", n.Pattern)\n\t}",
+    "VulnType": "Command Injection",
+    "VulnID": "CWE-78",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 59,
+    "EndLine": 61,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

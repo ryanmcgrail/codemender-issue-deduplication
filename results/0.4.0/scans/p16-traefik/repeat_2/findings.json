@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "ef1c3fc4-f1b7-5f4b-ae68-67935cdf3870",
+    "SessionID": "ChA4OGJkYzQwYTcwMmQ4M2JiEAgaATAqBG1haW4",
+    "Title": "Incomplete/Unanchored Regular Expression Validation in CORS Origin Allowed Checker",
+    "FilePath": "/home/jfplante_google_com/repos/p16-traefik_rep2/pkg/middlewares/headers/header.go",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "In the CORS implementation of Traefik's headers middleware (pkg/middlewares/headers/header.go), isOriginAllowed checks if a request's Origin header is allowed using a list of user-configured regular expressions. \nHowever, because it uses MatchString on the untrusted Origin string without anchoring the regular expressions (or because users might configure unanchored regular expressions), any substring match of a regular expression like '([a-z]+)\\\\.bar' will match origins like 'https://malicious.domain.bar.attacker.com' or 'https://maliciousbar.com'. \nAdditionally, if a user provides an AccessControlAllowOriginListRegex with a wildcard or a partially anchored regex (e.g., `foo.bar`), a lack of careful validation allows attackers to bypass CORS controls. When matched, the Origin is mirrored back in 'Access-Control-Allow-Origin'. Since Access-Control-Allow-Credentials can be configured to true, this allows malicious sites to read credentials-protected responses from the backend.\n\nConceptual Exploit Payload:\nFor a configuration with AccessControlAllowOriginListRegex = [\"([a-z]+)\\\\.bar\"]:\nAn attacker-controlled website hosted at 'https://attacker.bar.com' sends a request to the Traefik-proxy entrypoint:\n```http\nGET /api/sensitive-data HTTP/1.1\nHost: secure-app.internal\nOrigin: https://attacker.bar.com\nCookie: session_id=secret_session\n```\n\nBecause `([a-z]+)\\.bar` matches `attacker.bar` inside `https://attacker.bar.com`, isOriginAllowed returns `true` and the exact `Origin` value is mirrored in the response:\n```http\nHTTP/1.1 200 OK\nAccess-Control-Allow-Origin: https://attacker.bar.com\nAccess-Control-Allow-Credentials: true\n...\n```\nThis allows the attacker's script on `https://attacker.bar.com` to read the response body containing sensitive user data.",
+    "Snippet": "func (s *Header) isOriginAllowed(origin string) (bool, string) {\n\tfor _, item := range s.headers.AccessControlAllowOriginList {\n\t\tif item == \"*\" || item == origin {\n\t\t\treturn true, item\n\t\t}\n\t}\n\n\tfor _, regex := range s.allowOriginRegexes {\n\t\tif regex.MatchString(origin) {\n\t\t\treturn true, origin\n\t\t}\n\t}\n\n\treturn false, \"\"\n}",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-346",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 177,
+    "EndLine": 191,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

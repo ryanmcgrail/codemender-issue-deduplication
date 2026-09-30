@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "c525ce90-1c91-51f7-830c-4adff9e64ac9",
+    "SessionID": "ChBiNjMyNTA1MzZjOGQ3NGI3EAgaATAqBG1haW4",
+    "Title": "Stack Buffer Overflow and Integer Underflow in lwm2m_write_attr_handler via CoAP options",
+    "FilePath": "subsys/net/lib/lwm2m/lwm2m_observation.c",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In `subsys/net/lib/lwm2m/lwm2m_observation.c` inside `lwm2m_write_attr_handler`, CoAP URI Query options are processed to parse notification attributes (e.g., `pmin`, `pmax`, `gt`, `lt`, `st`).\n\n1. **Source**: CoAP options of type `COAP_OPTION_URI_QUERY` are extracted from an incoming (untrusted) network packet via `coap_find_options`.\n2. **Vulnerability**:\n   - First, there is no validation on the parsed option length. If a user provides an option with a length greater than `COAP_OPTION_BUF_LEN` (which is typically small, e.g., 13 bytes by default), `vlen` will be larger than 13, and `memcpy(opt_buf, options[i].value + plen + 1, vlen)` will overflow the stack buffer `opt_buf`.\n   - Second, if a user provides an option like `\\\"pmin\\\"` (length 4) without an equal sign (`'='`), the loop incrementing `plen` terminates with `plen = 4`. The check `plen != 2 \u0026\u0026 plen != 4` passes. `vlen` is then calculated as `options[i].len - plen - 1 = 4 - 4 - 1 = -1`. This integer underflow results in a negative value for `vlen`. When passed to `memcpy` as the size argument (which expects `size_t`), it wraps to a very large unsigned value (e.g. `SIZE_MAX`), leading to a massive out-of-bounds copy and an immediate crash (Denial of Service) or potential exploit.\n\n**Conceptual Exploit Payload**:\nSending a CoAP packet with a write attribute request containing:\n- A query parameter such as `\\\"pmin=12345678901234567890\\\"` (greater than `COAP_OPTION_BUF_LEN`) triggers a stack buffer overflow.\n- A query parameter of exactly `\\\"pmin\\\"` (no equal sign) triggers an integer underflow where `vlen = -1`, resulting in a massive stack memory corruption/crash.",
+    "Snippet": "\t\tvlen = options[i].len - plen - 1;\n\t\tmemcpy(opt_buf, options[i].value + plen + 1, vlen);\n\t\topt_buf[vlen] = '\\0';",
+    "VulnType": "CWE-121: Stack-based Buffer Overflow",
+    "VulnID": "CWE-121",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 1230,
+    "EndLine": 1232,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

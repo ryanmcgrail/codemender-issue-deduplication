@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "dda9f182-21da-510c-859a-e12cc3a91650",
+    "SessionID": "ChBlZjVjN2NlZTM4M2I2MGY3EAgaATAqBG1haW4",
+    "Title": "Denial of Service via X.509 name constraint parsing containing extremely long GEN_DIRNAME (CVE-2024-6119)",
+    "FilePath": "/home/jfplante_google_com/repos/p33-openssl_rep2/crypto/x509/v3_san.c",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "Under CVE-2024-6119, the function `X509_NAME_oneline()` does not properly handle extremely long or specially structured custom directory names (GEN_DIRNAME) within certificate extensions or subject/issuer names. Specifically, inside `i2v_GENERAL_NAME` (defined in `crypto/x509/v3_san.c`), when formatting `GEN_DIRNAME` via `X509_NAME_oneline()`, a fixed-size buffer `oline[256]` is used. When a carefully crafted malicious certificate containing a subject/issuer name or subject alternative name (SAN) directory name field longer than 255 characters is parsed, `X509_NAME_oneline()` attempts to write to this buffer, but since it is called with `len = sizeof(oline)` (which is 256), the return string might either get truncated or, under certain internal allocations/EBCDIC conversions, cause unexpected memory constraints. Specifically, in previous versions or configurations, `X509_NAME_oneline` can also return NULL or fail, or cause a null-pointer dereference/undefined behavior when the caller does not check for NULL or handles buffer boundaries unsafely. An attacker can construct a certificate with a large/deep directory name (GEN_DIRNAME) SAN extension that triggers a crash (Denial of Service) when parsed or printed via APIs like SSL_CTX_set_verify, CMP validation, or other diagnostic prints that utilize `X509_NAME_oneline()` or generalize directory name prints.",
+    "Snippet": "    case GEN_DIRNAME:\n        if (X509_NAME_oneline(gen-\u003ed.dirn, oline, sizeof(oline)) == NULL\n                || !X509V3_add_value(\"DirName\", oline, \u0026ret))\n            return NULL;\n        break;",
+    "VulnType": "CWE-119",
+    "VulnID": "CVE-2024-6119",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 185,
+    "EndLine": 189,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

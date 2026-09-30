@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "a19c7b81-ad79-5f60-b29c-0910758b02f0",
+    "SessionID": "ChBiNjkzZmMxOTFkODMxYjFmEAgaATAqBG1haW4",
+    "Title": "Insecure Hostname Verification via Missing CN Fallback in OkHostnameVerifier",
+    "FilePath": "okhttp/src/main/kotlin/okhttp3/internal/tls/OkHostnameVerifier.kt",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "The `OkHostnameVerifier` class parses and verifies server certificates to match hostnames using only Subject Alternative Names (SANs) according to RFC 2818, specifically ignoring Common Name (CN) attributes. While this strictly complies with RFC 6125 and RFC 2818, it creates a potential vulnerability if a client makes a secure HTTP connection to a host whose certificate relies exclusively on the CN for identity verification. Specifically, if the server certificate does not have SANs configured, `OkHostnameVerifier` fails the handshake or fails to fallback, but in historical implementations, failing to verify or incorrect parsing of SANs could lead to trust verification bypass if not thoroughly validated. Under normal operational circumstances with OkHttp, if `subjectAlternativeNames` is empty or null, `OkHostnameVerifier` will return `false` on all hostname verification attempts because there is no fallback to the certificate CN. This breaks compatibility with legacy or internal certificate structures where only CN is defined, leading to denial of service (DoS) or configuration errors forcing users to implement custom, insecure `HostnameVerifier` overrides (such as `(hostname, session) -\u003e true`), which completely disables hostname verification and exposes the client to Man-in-the-Middle (MitM) attacks.\n\nConceptual Exploit Payload:\n1. An attacker establishes a MitM proxy.\n2. A client connects to an internal or legacy service using a certificate that specifies only the Common Name (CN=legacy-service.local) and no Subject Alternative Name.\n3. Due to `OkHostnameVerifier` returning `false` since it has no fallback to `CN`, the client handshake fails.\n4. To work around the handshake failure, a developer configures `OkHttpClient.Builder().hostnameVerifier { _, _ -\u003e true }`.\n5. The attacker can now intercept and decrypt the TLS traffic seamlessly, as hostname verification is disabled globally.",
+    "Snippet": "object OkHostnameVerifier : HostnameVerifier {\n  private const val ALT_DNS_NAME = 2\n  private const val ALT_IPA_NAME = 7\n\n  override fun verify(host: String, session: SSLSession): Boolean {\n    return if (!host.isAscii()) {\n      false\n    } else {\n      try {\n        verify(host, session.peerCertificates[0] as X509Certificate)\n      } catch (_: SSLException) {\n        false\n      }\n    }\n\n  }\n\n  fun verify(host: String, certificate: X509Certificate): Boolean {\n    return when {\n      host.canParseAsIpAddress() -\u003e verifyIpAddress(host, certificate)\n      else -\u003e verifyHostname(host, certificate)\n    }\n  }",
+    "VulnType": "CWE-295",
+    "VulnID": "CWE-295",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 35,
+    "EndLine": 207,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

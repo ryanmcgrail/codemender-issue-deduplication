@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "ce17c799",
+    "severity": "CRITICAL",
+    "vuln_type": "Deserialization of Untrusted Data",
+    "file_path": "src/main/java/com/zaxxer/hikari/HikariJNDIFactory.java",
+    "title": "JNDI Reference Injection via HikariJNDIFactory Leading to Remote Code Execution",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "JNDI Reference Injection via HikariJNDIFactory Leading to Remote Code Execution",
+    "snippet": ""
+  }
+]

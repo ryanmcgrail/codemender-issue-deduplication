@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "0cf3dd40-2792-5eae-9591-15953ff341ec",
+    "session_id": "ChBkOWM4YmI3ZTg5ZWYzNGNiEAgaATAqBG1haW4",
+    "title": "SQL Injection in MSSQL MSUUid literal_processor via Inverted Quote Replacement",
+    "file_path": "/home/jfplante_google_com/repos/h01-sqlalchemy_rep1/lib/sqlalchemy/dialects/mssql/base.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "In SQLAlchemy's MSSQL dialect, the `MSUUid.literal_processor` method contains an argument reversal bug when escaping string values for UUID literals under native UUID mode (`self.native_uuid`, which is True by default).\n\n- **Source**: Untrusted user input supplied to a query filter or statement involving a `Uuid` column or literal (e.g., `stmt = select(table).where(table.c.uuid_col == user_input)`).\n- **Sanitization/Validation**: The `process` callable in `MSUUid.literal_processor` attempts to sanitize the input using `str(value).replace(\"''\", \"'\")`. Instead of escaping single quotes by doubling them via `replace(\"'\", \"''\")` (as is done correctly in `sqltypes.Uuid` and in line 1553 of `mssql/base.py`), the arguments are inverted. As a result, single quotes are not escaped at all, and any existing pairs of single quotes are unescaped to single quotes.\n- **Sink**: The string is wrapped in single quotes (`f\"'{str(value).replace(\\\"''\\\", \\\"'\\\")}'\"`) and concatenated directly into the compiled SQL query string when literal compilation is invoked (e.g. `statement.compile(dialect=mssql.dialect(), compile_kwargs={\"literal_binds\": True})`).\n\n**Conceptual Exploit Payload**:\nAn attacker passes the following string as the UUID value:\n`00000000-0000-0000-0000-000000000000' UNION SELECT password FROM users --`\n\nBecause `.replace(\"''\", \"'\")` does not escape `'`, the rendered SQL statement becomes:\n`SELECT * FROM items WHERE uuid_col = '00000000-0000-0000-0000-000000000000' UNION SELECT password FROM users --'`\nallowing arbitrary SQL injection.",
+    "snippet": "    def literal_processor(self, dialect):\n        if self.native_uuid:\n\n            def process(value):\n                return f\"\"\"'{str(value).replace(\"''\", \"'\")}'\"\"\"\n\n            return process",
+    "vuln_type": "SQL Injection",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 1535,
+    "end_line": 1541
+  }
+]

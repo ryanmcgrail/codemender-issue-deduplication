@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "39a8b06a-137f-5dd6-91b5-056307f89679",
+    "SessionID": "ChA1NDVhYzMxZjliNTg0ODZjEAgaATAqBG1haW4",
+    "Title": "Endless loop / Denial of Service in Brotli decompressor due to redundant input data",
+    "FilePath": "source/extensions/compression/brotli/decompressor/brotli_decompressor_impl.cc",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In production builds of Envoy, a Denial of Service (DoS) vulnerability exists in the Brotli decompressor due to an infinite loop. \n\nWhen a client sends a request with `Content-Encoding: br` and the request body consists of a valid Brotli stream followed by redundant trailing bytes, and these bytes are delivered across multiple buffer slices (e.g. Slice 1 contains the complete Brotli stream, and Slice 2 contains the redundant bytes):\n1. Slice 1 is fully decoded. `BrotliDecoderDecompressStream` returns `BROTLI_DECODER_RESULT_SUCCESS` and `ctx.avail_in_` becomes 0.\n2. The decompressor moves to Slice 2, setting `ctx.avail_in_` to the size of the redundant bytes (\u003e 0).\n3. The `while (ctx.avail_in_ \u003e 0)` loop invokes `process()`.\n4. Inside `process()`, `BrotliDecoderDecompressStream` is called. Since the decompressor state is already finished, it does not consume any input and returns `BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT`.\n5. In production/release builds, the assert `ASSERT(ctx.avail_in_ == 0)` is compiled out (omitted).\n6. The code falls through the switch-case to `BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT`, updates the output, and returns `true`.\n7. Because `process()` returned `true` and `ctx.avail_in_` was not decremented (as no bytes were consumed by the decoder), the `while (ctx.avail_in_ \u003e 0)` loop continues to run forever, causing 100% CPU exhaustion and a Denial of Service.\n\nConceptual Exploit Payload:\nTo trigger this vulnerability, send an HTTP request with `Content-Encoding: br` and a request body split into two buffer slices:\n- Slice 1: A valid Brotli-compressed block, e.g. compressing the string \"test\".\n- Slice 2: Trailing redundant bytes, e.g., \"\\x00\\x00\\x00\\x00\".\n\nWhen Envoy decompresses the body, it will enter the infinite loop on Slice 2.",
+    "Snippet": "    while (ctx.avail_in_ \u003e 0) {\n      if (!process(ctx, output_buffer)) {\n        ctx.finalizeOutput(output_buffer);\n        return;\n      }\n    }",
+    "VulnType": "CWE-835: Loop with Unreachable Exit Condition ('Infinite Loop')",
+    "VulnID": "CWE-835",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 43,
+    "EndLine": 48,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

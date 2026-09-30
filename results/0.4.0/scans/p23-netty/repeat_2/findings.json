@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "9a350a0c-f88c-5777-a03b-e29549743c1b",
+    "SessionID": "ChA2ZDY1NDhjNmVlNmU0NjliEAgaATAqBG1haW4",
+    "Title": "HTTP Header Value Validation Bypass on Sliced AsciiString due to Offset Logic Error (CVE-2024-27309)",
+    "FilePath": "codec-http/src/main/java/io/netty/handler/codec/http/HttpHeaderValidationUtil.java",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability Details\nIn Netty's `HttpHeaderValidationUtil.java`, the function `verifyValidHeaderValueAsciiString` is designed to validate HTTP header values against RFC 7230 guidelines. However, a critical logic bug exists in how the method handles `AsciiString` instances with a non-zero `arrayOffset()` (such as sliced or subsequence instances of `AsciiString` commonly produced during parser optimization/zero-copy routing).\n\nSpecifically:\n- `start` is assigned the `arrayOffset()` of the `AsciiString`.\n- `length` is assigned `value.length()`.\n- The loop iterates with bounds check `i \u003c length` instead of `i \u003c start + length`.\n- If `start` is positive (which is standard for slices) and `start + 1 \u003e= length`, the loop condition `i \u003c length` is false on the first check, preventing any characters of the slice (after the first character) from being validated.\n- Even if `start + 1 \u003c length`, the loop evaluates indices starting at `start + 1` up to `length - 1` in the underlying array, completely missing characters at the end of the slice (from `length` to `start + length - 1`) and checking incorrect offset boundaries.\n\nAs a result, invalid characters (e.g. CR, LF, or CTL characters) embedded within header values formatted as sliced `AsciiString` will bypass validation entirely.\n\n### Impact \u0026 Attack Vector\nIf Netty is used in a reverse proxy or gateway, a remote attacker can supply an HTTP/1.x or HTTP/2 request containing a header value with a malicious carriage return and line feed sequence (CRLF, `\\r\\n`). If parsed as a sliced `AsciiString` subsequence, the CRLF sequence bypasses Netty's HTTP header validation. This allows attackers to perform HTTP Request Smuggling (CWE-444), HTTP Response Splitting, or Cache Poisoning.\n\n### Conceptual Exploit Payload\nConsider a request where the backend gateway/proxy receives:\n```http\nPOST / HTTP/1.1\nHost: local.gateway.com\nContent-Length: 153\nX-Sliced-Header: valid-prefix\\r\\nContent-Length: 0\\r\\n\\r\\nGET /admin HTTP/1.1\\r\\nHost: local.gateway.com\\r\\n\\r\\n\n```\n\nIf `X-Sliced-Header` is represented as a sliced `AsciiString` (with non-zero `arrayOffset()`), the validation will only verify the first character ('v') and completely bypass the remainder, treating the entire value as valid. When forwarded downstream, the raw CRLF sequences are printed, prompting the downstream HTTP/1.1 parser to interpret `GET /admin` as a separate pipelined request.",
+    "Snippet": "    private static int verifyValidHeaderValueAsciiString(AsciiString value) {\n        // Validate value to field-content rule.\n        //  field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]\n        //  field-vchar    = VCHAR / obs-text\n        //  VCHAR          = %x21-7E ; visible (printing) characters\n        //  obs-text       = %x80-FF\n        //  SP             = %x20\n        //  HTAB           = %x09 ; horizontal tab\n        //  See: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2\n        //  And: https://datatracker.ietf.org/doc/html/rfc5234#appendix-B.1\n        final byte[] array = value.array();\n        final int start = value.arrayOffset();\n        int b = array[start] \u0026 0xFF;\n        if (b \u003c 0x21 || b == 0x7F) {\n            return 0;\n        }\n        int length = value.length();\n        for (int i = start + 1; i \u003c length; i++) {\n            b = array[i] \u0026 0xFF;\n            if (b \u003c 0x20 \u0026\u0026 b != 0x09 || b == 0x7F) {\n                return i - start;\n            }\n        }\n        return -1;\n    }",
+    "VulnType": "CWE-113",
+    "VulnID": "CVE-2024-27309",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 115,
+    "EndLine": 139,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "5cb9e157-554c-522c-adb6-7e10fa054714",
+    "SessionID": "ChA2Y2RhN2VjM2JiZDNlNGJmEAgaATAqBG1haW4",
+    "Title": "Path Traversal / Local File Disclosure in HttpStaticFileServerHandler via Simplistic URI Sanitization",
+    "FilePath": "example/src/main/java/io/netty/example/http/file/HttpStaticFileServerHandler.java",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "### Vulnerability Analysis\n\nThe `HttpStaticFileServerHandler` contains a path traversal vulnerability due to insufficient input validation in its `sanitizeUri` method. \n\n1. **Source**: The untrusted input enters the application through `request.uri()` in `channelRead0(...)`.\n2. **Sanitization/Validation**: The handler attempts to sanitize the URI in the `sanitizeUri(...)` helper method. It decodes the URL using `URLDecoder.decode(uri, \"UTF-8\")` and replaces forward slashes (`/`) with `File.separatorChar`. It then performs a simplistic check to block any path containing dot-segments (`.` followed/preceded by the path separator). However, this check is simplistic and prone to OS-specific bypasses (e.g., mixed slash/backslash behavior on Windows or unexpected URL encoding/decoding sequences), as well as being explicitly marked in the code comments as a 'simplistic dumb security check' not suitable for production.\n3. **Sink**: The resulting unsanitized path is used to construct a `File` object (`new File(path)`) and subsequently read via `new RandomAccessFile(file, \"r\")`, which returns the file's contents directly to the HTTP client.\n\n### Conceptual Exploit Payload\n\nAn attacker can send a request to a server using `HttpStaticFileServerHandler` with path traversal segments:\n\n```http\nGET /..%2f..%2f..%2f..%2fetc/passwd HTTP/1.1\nHost: localhost:8080\n```\n\nDepending on the host operating system and deployment environment, the URL-decoded path might bypass the separator checks or utilize platform-specific separators (such as `\\` on Windows) to traverse outside the intended web root and access sensitive local system files like `/etc/passwd`.",
+    "Snippet": "    private static String sanitizeUri(String uri) {\n        // Decode the path.\n        try {\n            uri = URLDecoder.decode(uri, \"UTF-8\");\n        } catch (UnsupportedEncodingException e) {\n            throw new Error(e);\n        }\n\n        if (uri.isEmpty() || uri.charAt(0) != '/') {\n            return null;\n        }\n\n        // Convert file separators.\n        uri = uri.replace('/', File.separatorChar);\n\n        // Simplistic dumb security check.\n        // You will have to do something serious in the production environment.\n        if (uri.contains(File.separator + '.') ||\n                uri.contains('.' + File.separator) ||\n                uri.charAt(0) == '.' || uri.charAt(uri.length() - 1) == '.' ||\n                INSECURE_URI.matcher(uri).matches()) {\n            return null;\n        }\n\n        // Convert to absolute path.\n        return SystemPropertyUtil.get(\"user.dir\") + File.separator + uri;\n    }",
+    "VulnType": "Path Traversal",
+    "VulnID": "CWE-22",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 244,
+    "EndLine": 270,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

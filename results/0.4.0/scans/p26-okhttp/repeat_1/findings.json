@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "c6295293-7d04-5366-add3-a3ad47a8aca3",
+    "SessionID": "ChBlMDQ2MmMwZTRkNWVjOTdlEAgaATAqBG1haW4",
+    "Title": "TLS Certificate Verification Bypass via Reverse DNS Poisoning in InsecureExtendedTrustManager",
+    "FilePath": "/home/jfplante_google_com/repos/p26-okhttp_rep1/okhttp-tls/src/main/kotlin/okhttp3/tls/internal/InsecureExtendedTrustManager.kt",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability: TLS Certificate Verification Bypass via Reverse DNS Poisoning in InsecureExtendedTrustManager\n\n**Source**: The reverse DNS record (PTR record) of the peer socket's remote IP address.\n**Sanitization/Validation**: The code checks `socket.peerName() !in insecureHosts`, but `socket.peerName()` relies on `address.hostName` from `InetSocketAddress`, which performs an unauthenticated reverse DNS lookup on the peer IP address without any sanitization or validation.\n**Sink**: If the reverse DNS name matches any entry in `insecureHosts` (e.g. `\"localhost\"` or `\"local\"`), the trust manager skips certificate verification entirely by bypassing the delegate trust manager (`delegate.checkServerTrusted`).\n**Reachability**: Reachable in Java JRE platforms when performing SSL/TLS connections that invoke `checkServerTrusted(chain, authType, socket)` inside the custom `InsecureExtendedTrustManager`.\n\n### Conceptual Exploit Payload\nSuppose a developer configures `HandshakeCertificates` to allow insecure connections to `\"localhost\"` for local development:\n```kotlin\nval certificates = HandshakeCertificates.Builder()\n    .addInsecureHost(\"localhost\")\n    .build()\n```\nAn attacker intercepts the connection to a legitimate external site (e.g. `https://github.com/`) via DNS hijacking or ARP spoofing and routes it to their malicious server at IP `192.0.2.1`.\n1. The attacker configures a reverse DNS PTR record for their IP `192.0.2.1` returning `localhost`.\n2. When the client attempts to connect to `https://github.com/`, the TLS socket connects to `192.0.2.1:443`.\n3. JSSE calls `checkServerTrusted(chain, authType, socket)` on the custom trust manager.\n4. `socket.peerName()` returns `\"localhost\"` because of the reverse DNS lookup.\n5. The trust manager matches `\"localhost\"` in `insecureHosts` and skips certificate validation, returning successfully.\n6. The attacker serves a self-signed certificate for `github.com`.\n7. `OkHostnameVerifier` verifies the hostname `\"github.com\"` against the certificate's SAN (which is `\"github.com\"`). Since certificate validation was skipped, this self-signed certificate is accepted as valid, successfully establishing a MitM connection.",
+    "Snippet": "  override fun checkServerTrusted(\n    chain: Array\u003cout X509Certificate\u003e,\n    authType: String,\n    socket: Socket\n  ) {\n    if (socket.peerName() !in insecureHosts) {\n      delegate.checkServerTrusted(chain, authType, socket)\n    }\n  }",
+    "VulnType": "CWE-295",
+    "VulnID": "CWE-295",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 39,
+    "EndLine": 47,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

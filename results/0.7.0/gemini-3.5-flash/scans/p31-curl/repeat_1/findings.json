@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "9c97b180-0edd-56a3-9777-be766f589c66",
+    "session_id": "ChAyOWY4NzRjYWMyYmIxNzMzEAgaATAqBG1haW4",
+    "title": "Stack-Based Buffer Free in ASN.1 UniversalString/BMPString Parser (CVE-2024-6197)",
+    "file_path": "lib/vtls/x509asn1.c",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "### Vulnerability Analysis\n\nA critical stack-based buffer free vulnerability exists in curl's ASN.1 name parsing logic (`utf8asn1str` in `lib/vtls/x509asn1.c`). This is tracked as CVE-2024-6197.\n\n#### Data Flow and Root Cause:\n1. **Source**: An untrusted TLS certificate containing a `UniversalString` or `BMPString` inside a DN (Distinguished Name) field (e.g. Common Name, Organization, etc.) is received during the TLS handshake.\n2. **Sink**: `free(buf);` (where `buf` is a stack-allocated buffer `char buf[4];`).\n3. **Logic Flaw**:\n   - When converting a Universal String or BMP String to UTF-8, the characters are decoded as big-endian values into `wc`.\n   - If the resulting `wc` character code is `\u003e= 0x00200000` (which is an invalid UTF-8 codepoint boundary or a code point too large to represent in UTF-8), the code tries to return an error (`CURLE_WEIRD_SERVER_REPLY`).\n   - However, before returning, the code incorrectly calls `free(buf);` on the local stack variable `buf`.\n   - Freeing stack-allocated memory is undefined behavior and typically causes an immediate application crash (Denial of Service) or can be exploited to achieve arbitrary code execution/privilege escalation.\n\n### Conceptual Exploit Payload\n\nAn attacker can serve a malicious X.509 certificate during a TLS connection. The certificate's Subject or Issuer Distinguished Name contains a `UniversalString` or `BMPString` field with a character code greater than or equal to `0x00200000` (for example, the 4-byte sequence `0x00 0x20 0x00 0x00` in a `UniversalString`).\n\nWhen curl connects to this server and parses the certificate (e.g. when `CURLOPT_CERTINFO` is active), `utf8asn1str` is called on the field, the character decodes to `wc \u003e= 0x00200000`, and `free(buf)` is called on the stack buffer, corrupting the memory/causing a crash.",
+    "snippet": "            if(wc \u003e= 0x00200000) {\n              free(buf);\n              /* Invalid char. size for target encoding. */\n              return CURLE_WEIRD_SERVER_REPLY;\n            }",
+    "vuln_type": "CWE-763: Release of Invalid Pointer or Reference",
+    "vuln_id": "CWE-763",
+    "status": "OPEN",
+    "start_line": 393,
+    "end_line": 393
+  },
+  {
+    "finding_id": "a8b7e4f4-5095-5727-8bb6-98362306991d",
+    "session_id": "ChAyOWY4NzRjYWMyYmIxNzMzEAgaATAqBG1haW4",
+    "title": "Out-of-bounds Read and Heap Memory Leak via ASN.1 GeneralizedTime Parser (CVE-2024-7264)",
+    "file_path": "lib/vtls/x509asn1.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Vulnerability Analysis\n\nAn out-of-bounds read and heap memory leak vulnerability exists in curl's ASN.1 GeneralizedTime parser (`GTime2str` in `lib/vtls/x509asn1.c`). This parser is used to extract X.509 certificate information when certinfo is enabled (e.g., `CURLOPT_CERTINFO`), which is supported by backends like GnuTLS, Schannel, and SecureTransport.\n\n#### Data Flow and Root Cause:\n1. **Source**: The parser reads untrusted certificate fields (specifically `notBefore` and `notAfter` fields formatted as `GeneralizedTime`) during the TLS handshake.\n2. **Sink**: `for(fracl = tzp - fracp - 1; fracl \u0026\u0026 fracp[fracl - 1] == '0'; fracl--)`\n3. **Logic Flaw**:\n   - When a dot `.` or comma `,` is followed by non-digits (e.g., `20240911120000.Z`), the `if` block is entered.\n   - `fracp` is incremented to point to `Z`.\n   - The `do { tzp++; } while(...)` loop executes once, incrementing `tzp` to point to `Z` as well.\n   - Since `*tzp` (`'Z'`) is not a digit, the loop terminates.\n   - Now, `tzp == fracp`. Thus, `tzp - fracp` is `0`.\n   - `fracl` is assigned `tzp - fracp - 1` which underflows to `SIZE_MAX`.\n   - The loop condition evaluates `fracp[fracl - 1]`, which is `fracp[SIZE_MAX - 1]`, or `fracp[-2]` (accessing memory before `fracp`).\n   - If the accessed character is `'0'`, the loop continues, reading further backwards in memory.\n   - Finally, `fracl` (which remains a huge number) is passed to `Curl_dyn_addf` with `%.*s` precision, causing `printf` to copy a massive amount of out-of-bounds heap memory into the destination dynamic buffer.\n\n### Conceptual Exploit Payload\n\nAn attacker can serve an X.509 certificate during a TLS handshake with a `notBefore` or `notAfter` `GeneralizedTime` field containing a dot followed immediately by a timezone character:\n```\n20240911120000.Z\n```\nOr with trailing zeros in the seconds field to continue reading backwards:\n```\n20240911120000.,Z\n```\nWhen parsed, `fracl` underflows, and the subsequent `Curl_dyn_addf` copies out-of-bounds heap memory into curl's certificate information storage, leaking potentially sensitive data (such as other TLS session keys, cookies, or heap pointers) back to the client or crashing the process.",
+    "snippet": "    /* Strip leading zeroes in fractional seconds. */\n    for(fracl = tzp - fracp - 1; fracl \u0026\u0026 fracp[fracl - 1] == '0'; fracl--)\n      ;",
+    "vuln_type": "CWE-125: Out-of-bounds Read",
+    "vuln_id": "CWE-125",
+    "status": "OPEN",
+    "start_line": 523,
+    "end_line": 524
+  }
+]

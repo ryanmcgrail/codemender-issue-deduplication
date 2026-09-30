@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "c5a8c3f3-5d8b-5cdb-9b8d-6e3a8c5ce6a1",
+    "session_id": "ChA0ZjJmNmQ3Nzg1NzQ0NjEyEAgaATAqBG1haW4",
+    "title": "Type Confusion and Memory Corruption in X.509 Certificate Name Check",
+    "file_path": "/home/jfplante_google_com/repos/p33-openssl_rep1/crypto/x509/v3_utl.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Flow Trace:\n- Source: An untrusted X.509 certificate presented by a remote peer during TLS handshake or supplied to certificate validation functions (e.g. X509_check_host or SSL_set1_host). The certificate contains a Subject Alternative Name (SAN) extension with an entry of type GEN_OTHERNAME.\n- Sanitization/Validation: In `do_x509_check()`, when verifying DNS hostnames (`check_type == GEN_DNS`), the condition `(gen-\u003etype == GEN_OTHERNAME) \u0026\u0026 (check_type == GEN_EMAIL)` evaluates to false. Execution falls through to the `else` block:\n```c\nif ((gen-\u003etype != check_type) \u0026\u0026 (gen-\u003etype != GEN_OTHERNAME))\n    continue;\n```\nBecause `gen-\u003etype == GEN_OTHERNAME`, the condition evaluates to false, so the `continue` statement is bypassed.\n- Sink: At line 946, `cstr = gen-\u003ed.dNSName;` is executed because `check_type == GEN_DNS`. Because `gen-\u003ed` is a union, `gen-\u003ed.dNSName` shares the memory location of `gen-\u003ed.otherName`. `cstr` (typed as `ASN1_STRING *`) is now pointing to an `OTHERNAME` structure (`struct otherName_st { ASN1_OBJECT *type_id; ASN1_TYPE *value; }`). At line 950, `do_check_string(cstr, alt_type, equal, ...)` is called. In `do_check_string()`, fields of `cstr` such as `cstr-\u003elength` (which maps to `otherName-\u003etype_id` pointer bits) and `cstr-\u003edata` (which maps to `otherName-\u003evalue`) are dereferenced, causing out-of-bounds memory reads, null pointer dereference, or a crash (denial of service).\n\nConceptual Exploit Payload:\nA TLS server (or attacker providing a certificate) presents an X.509 certificate with an X509v3 Subject Alternative Name extension containing an `otherName` sequence:\n```\nSubjectAlternativeName = otherName:1.2.3.4;UTF8:test\n```\nWhen a TLS client with hostname verification enabled (e.g. `SSL_set1_host(ssl, \"example.com\")`) validates the server certificate, `X509_check_host()` is called with `check_type = GEN_DNS`. `do_x509_check()` traverses the SANs, fails to skip the `otherName` entry due to the faulty check at line 939, treats `otherName` as `dNSName`, and passes it into `do_check_string()`, causing an immediate crash or invalid memory dereference.",
+    "snippet": "            } else {\n                if ((gen-\u003etype != check_type) \u0026\u0026 (gen-\u003etype != GEN_OTHERNAME))\n                    continue;\n            }\n            san_present = 1;\n            if (check_type == GEN_EMAIL)\n                cstr = gen-\u003ed.rfc822Name;\n            else if (check_type == GEN_DNS)\n                cstr = gen-\u003ed.dNSName;\n            else\n                cstr = gen-\u003ed.iPAddress;\n            /* Positive on success, negative on error! */\n            if ((rv = do_check_string(cstr, alt_type, equal, flags,\n                                      chk, chklen, peername)) != 0)\n                break;",
+    "vuln_type": "CWE-843",
+    "vuln_id": "CVE-2024-6119",
+    "status": "OPEN",
+    "start_line": 938,
+    "end_line": 952
+  },
+  {
+    "finding_id": "8aadeff6-913f-5844-b35f-84ae8c4e1de2",
+    "session_id": "ChA0ZjJmNmQ3Nzg1NzQ0NjEyEAgaATAqBG1haW4",
+    "title": "Use-After-Free in SSL_free_buffers During Incomplete Record Read",
+    "file_path": "/home/jfplante_google_com/repos/p33-openssl_rep1/ssl/record/methods/tls_common.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Flow Trace:\n- Source: Untrusted network byte stream received over a TLS connection using non-blocking I/O.\n- Sanitization/Validation: In `tls_free_buffers()`, the check:\n```c\nif (rl-\u003ecurr_rec \u003c rl-\u003enum_recs || TLS_BUFFER_get_left(\u0026rl-\u003erbuf) != 0)\n    return 0;\n```\nonly checks if there are unread complete records (`rl-\u003ecurr_rec \u003c rl-\u003enum_recs`) or if `TLS_BUFFER_get_left(\u0026rl-\u003erbuf)` is non-zero. When an application reads from a non-blocking socket, `tls_default_read_n()` may first read the 5-byte TLS record header. At that point, `rl-\u003epacket_length` is 5 and `rb-\u003eleft` is 0. If the subsequent `BIO_read()` for the record payload returns a retry code (`OSSL_RECORD_RETURN_RETRY`), control returns to the caller with `rl-\u003epacket_length \u003e 0`. If the application calls `SSL_free_buffers()`, `rl-\u003ecurr_rec \u003c rl-\u003enum_recs` is false and `TLS_BUFFER_get_left()` is 0, so the check fails to detect the partially read record.\n- Sink: `tls_free_buffers()` calls `tls_release_read_buffer(rl)`, which frees `rl-\u003erbuf.buf` (`OPENSSL_free(b-\u003ebuf); b-\u003ebuf = NULL;`). When the application later calls `SSL_read()` once additional network bytes arrive, `tls_default_read_n()` is called with `extend = 1`. In `tls_default_read_n()` (lines 328-335), `len = rl-\u003epacket_length` (5 bytes) and `memmove(pkt, rl-\u003epacket, len + left)` dereferences `rl-\u003epacket`, which points to the freed buffer. This results in a Use-After-Free condition, memory corruption, and application crash.\n\nConceptual Exploit Payload:\n1. An attacker establishes a TLS connection to an application operating in non-blocking mode that calls `SSL_free_buffers()` (or uses `SSL_MODE_RELEASE_BUFFERS`).\n2. The attacker transmits only the 5-byte TLS record header:\n   `\\x16\\x03\\x03\\x01\\x00` (Handshake record of length 256 bytes)\n3. The server calls `SSL_read()`, which reads the 5 bytes, advances `rl-\u003epacket_length = 5`, sets `rb-\u003eleft = 0`, and returns SSL_ERROR_WANT_READ.\n4. The server application calls `SSL_free_buffers(ssl)`. OpenSSL frees the read buffer (`rl-\u003erbuf.buf`).\n5. The attacker transmits the remaining record body bytes.\n6. The server resumes with `SSL_read(ssl, ...)`, triggering the UAF in `tls_default_read_n` via `memmove` on `rl-\u003epacket`.",
+    "snippet": "    /* If we have pending data to be read then fail */\n    if (rl-\u003ecurr_rec \u003c rl-\u003enum_recs || TLS_BUFFER_get_left(\u0026rl-\u003erbuf) != 0)\n        return 0;\n\n    return tls_release_read_buffer(rl);",
+    "vuln_type": "CWE-416",
+    "vuln_id": "CVE-2024-4741",
+    "status": "OPEN",
+    "start_line": 2127,
+    "end_line": 2130
+  },
+  {
+    "finding_id": "290d5edd-75d0-56bf-9d6f-175c0ee9f667",
+    "session_id": "ChA0ZjJmNmQ3Nzg1NzQ0NjEyEAgaATAqBG1haW4",
+    "title": "Out-of-Bounds Read and Write in GF(2^m) Elliptic Curve Parameter Handling",
+    "file_path": "/home/jfplante_google_com/repos/p33-openssl_rep1/crypto/ec/ec2_smpl.c",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Flow Trace:\n- Source: Untrusted elliptic curve parameters defining a curve over GF(2^m) (e.g. from an untrusted private or public key, X.509 certificate with explicit parameters, or cryptographic parameters passed to EC APIs like `EC_GROUP_new_curve_GF2m` or `EC_GROUP_set_curve`).\n- Sanitization/Validation: In `ossl_ec_GF2m_simple_group_set_curve()` (`crypto/ec/ec2_smpl.c`):\n```c\ni = BN_GF2m_poly2arr(group-\u003efield, group-\u003epoly, 6) - 1;\nif ((i != 5) \u0026\u0026 (i != 3)) {\n    ERR_raise(ERR_LIB_EC, EC_R_UNSUPPORTED_FIELD);\n    goto err;\n}\n```\nThe array `group-\u003epoly` has length 6 (`int poly[6]`). The intended contract of `BN_GF2m_poly2arr` is to write polynomial exponents terminated with `-1`. For a pentanomial, there are 5 term degrees plus the `-1` terminator, so `BN_GF2m_poly2arr` should return 6, giving `i = 5`.\nHowever, if a malicious polynomial `p` has 6 non-zero bits set (6 terms), `BN_GF2m_poly2arr` fills all 6 slots of `group-\u003epoly[0..5]` with term powers. Since `k` reaches `max` (6), the check `if (k \u003c max)` is false, and the `-1` terminator is NEVER written. `BN_GF2m_poly2arr` returns `k = 6`.\nConsequently, `i = 6 - 1 = 5`. The validation check `if ((i != 5) \u0026\u0026 (i != 3))` evaluates to false, erroneously accepting the unterminated 6-term polynomial as a valid pentanomial!\n- Sink: At line 117, `BN_GF2m_mod_arr(group-\u003ea, a, group-\u003epoly)` is called. Inside `BN_GF2m_mod_arr()` (`crypto/bn/bn_gf2m.c` lines 330 and 366), reduction loops iterate with `for (k = 1; p[k] != 0; k++)`. Because `group-\u003epoly[0..5]` are all non-zero and no zero or negative terminator exists in the 6 elements, the loop accesses `group-\u003epoly` past its boundary into adjacent memory of the `EC_GROUP` structure (Out-of-Bounds Read). It then uses these out-of-bounds values to compute word indices `n = p[k] / BN_BITS2` and executes `z[n] ^= (zz \u003c\u003c d0)` and `z[j - n] ^= (zz \u003e\u003e d0)`, resulting in Out-of-Bounds Writes into the BIGNUM buffer `z` (heap memory corruption).\n\nConceptual Exploit Payload:\nAn attacker supplies an explicit GF(2^m) curve with polynomial:\n`p = t^163 + t^162 + t^161 + t^160 + t^159 + t^158` (6 non-zero terms, no degree-0 term).\nIn hex: `p = 0xFC000000000000000000000000000000000000000`.\nWhen `EC_GROUP_new_curve_GF2m(p, a, b, ctx)` is invoked, `ossl_ec_GF2m_simple_group_set_curve` is called. `BN_GF2m_poly2arr` writes 163, 162, 161, 160, 159, 158 into `group-\u003epoly[0..5]` without a `-1` terminator and returns 6. `i` is computed as 5, bypassing the validation check. `BN_GF2m_mod_arr` subsequently executes reduction, reading past `group-\u003epoly` and corrupting heap memory.",
+    "snippet": "    i = BN_GF2m_poly2arr(group-\u003efield, group-\u003epoly, 6) - 1;\n    if ((i != 5) \u0026\u0026 (i != 3)) {\n        ERR_raise(ERR_LIB_EC, EC_R_UNSUPPORTED_FIELD);\n        goto err;\n    }\n\n    /* group-\u003ea */\n    if (!BN_GF2m_mod_arr(group-\u003ea, a, group-\u003epoly))\n        goto err;",
+    "vuln_type": "CWE-787",
+    "vuln_id": "CVE-2024-9143",
+    "status": "OPEN",
+    "start_line": 110,
+    "end_line": 118
+  },
+  {
+    "finding_id": "c8491a68-57d4-567a-b2c0-dcb8e730fddf",
+    "session_id": "ChA0ZjJmNmQ3Nzg1NzQ0NjEyEAgaATAqBG1haW4",
+    "title": "Out-of-Bounds Read in SSL_select_next_proto with Empty Protocol List",
+    "file_path": "/home/jfplante_google_com/repos/p33-openssl_rep1/ssl/ssl_lib.c",
+    "severity": "MEDIUM",
+    "confidence": 100,
+    "analysis": "Data Flow Trace:\n- Source: Untrusted ALPN/NPN protocol list supplied in a TLS ClientHello message or passed by an application to `SSL_select_next_proto()` in an ALPN/NPN selection callback.\n- Sanitization/Validation: `SSL_select_next_proto()` searches for matching protocols between the server and client lists:\n```c\n    for (i = 0; i \u003c server_len;) {\n        for (j = 0; j \u003c client_len;) {\n...\n```\nIf the client list has zero length (`client_len == 0`), or no overlapping protocol is identified, the search loops finish without finding a match. There is no verification that `client_len \u003e 0` before setting `result = client`.\n- Sink: At line 3562, `*outlen = result[0];` unconditionally dereferences the first byte of `result` (which points to `client`). When `client_len == 0`, `client` is an empty buffer (0 bytes), resulting in an out-of-bounds read of 1 byte past the allocated memory. If `client` is placed at a page boundary or unmapped memory address, this causes an immediate segmentation fault / application crash (Denial of Service).\n\nConceptual Exploit Payload:\nA TLS client connects to a TLS server that uses `SSL_select_next_proto` in its ALPN selection callback (e.g., `SSL_CTX_set_alpn_select_cb`). The client provides an empty ALPN extension in its TLS ClientHello:\n```\nExtension: application_layer_protocol_negotiation (len=0)\n```\nThe server's ALPN callback invokes `SSL_select_next_proto(out, outlen, server_protos, server_protos_len, client_in, 0)`. The function iterates 0 times, falls through to `result = client`, and attempts to read `result[0]`, resulting in an out-of-bounds read of 1 byte beyond `client`.",
+    "snippet": "    /* There's no overlap between our protocols and the server's list. */\n    result = client;\n    status = OPENSSL_NPN_NO_OVERLAP;\n\n found:\n    *out = (unsigned char *)result + 1;\n    *outlen = result[0];\n    return status;",
+    "vuln_type": "CWE-125",
+    "vuln_id": "CVE-2024-5535",
+    "status": "OPEN",
+    "start_line": 3557,
+    "end_line": 3563
+  }
+]

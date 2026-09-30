@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "12fffe7d-759a-56c7-a9fe-35a27cfb7104",
+    "session_id": "ChA2MDQyZjRkNzNjZWMyYzE4EAgaATAqBG1haW4",
+    "title": "Insecure Default Configuration in Windows Named Pipe Server (Named Pipe Squatting / Hijacking)",
+    "file_path": "/home/jfplante_google_com/repos/p28-tokio_rep1/tokio/src/net/windows/named_pipe.rs",
+    "severity": "HIGH",
+    "confidence": 90,
+    "analysis": "### Data Path Trace\n- **Source**: A local, unprivileged attacker running on the same Windows host creates a named pipe in the global `\\\\.\\pipe\\` namespace (e.g., `\\\\.\\pipe\\app-ipc-pipe`) before the legitimate server process initializes.\n- **Sanitization/Validation**: `ServerOptions::new()` sets `first_pipe_instance: false` by default. When the application creates the server instance via `ServerOptions::new().create(pipe_name)` (as instructed in the documentation and examples), `first_pipe_instance` is not set, meaning `FILE_FLAG_FIRST_PIPE_INSTANCE` (0x00080000) is omitted from `open_mode`. The library does not validate whether this call creates the original named pipe or attaches to a pre-existing pipe instance.\n- **Sink**: `windows_sys::CreateNamedPipeW` in `create_with_security_attributes_raw` is called without `FILE_FLAG_FIRST_PIPE_INSTANCE`.\n\n### Impact\nIn Windows Named Pipe architecture, the process that creates the initial named pipe instance defines the pipe's Discretionary Access Control List (DACL) and ownership. Because `ServerOptions::new()` defaults `first_pipe_instance` to `false`, calling `ServerOptions::new().create(...)` causes `CreateNamedPipeW` to quietly create a secondary instance on an existing pipe if one already exists, rather than failing with `ERROR_ACCESS_DENIED`. A low-privilege attacker can squat on the pipe name beforehand, defining a permissive security descriptor, and intercept connections from clients, tamper with messages, or perform a man-in-the-middle attack on the IPC channel.\n\n### Conceptual Exploit Payload\n1. An unprivileged attacker runs:\n   ```c\n   HANDLE hPipe = CreateNamedPipeW(\n       L\"\\\\\\\\.\\\\pipe\\\\target_ipc\",\n       PIPE_ACCESS_DUPLEX,\n       PIPE_TYPE_BYTE | PIPE_WAIT,\n       PIPE_UNLIMITED_INSTANCES,\n       4096, 4096, 0, NULL // Attacker owns the pipe and controls DACL\n   );\n   ```\n2. The server application starts (potentially running with higher privileges or handling sensitive user data) and executes:\n   ```rust\n   let server = ServerOptions::new().create(r\"\\\\.\\pipe\\target_ipc\")?;\n   ```\n3. Because `first_pipe_instance` is `false`, the server's `CreateNamedPipeW` attaches to the attacker's pipe.\n4. Clients connecting to `\\\\.\\pipe\\target_ipc` can now connect to the attacker's handle, allowing the attacker to eavesdrop on or inject arbitrary IPC messages.",
+    "snippet": "    pub fn new() -\u003e ServerOptions {\n        ServerOptions {\n            access_inbound: true,\n            access_outbound: true,\n            first_pipe_instance: false,\n            write_dac: false,\n            write_owner: false,\n            access_system_security: false,\n            pipe_mode: PipeMode::Byte,\n            reject_remote_clients: true,\n            max_instances: windows_sys::PIPE_UNLIMITED_INSTANCES,\n            out_buffer_size: 65536,\n            in_buffer_size: 65536,\n            default_timeout: 0,\n        }\n    }",
+    "vuln_type": "CWE-276: Incorrect Default Permissions",
+    "vuln_id": "CWE-276",
+    "status": "OPEN",
+    "start_line": 1763,
+    "end_line": 1778
+  }
+]

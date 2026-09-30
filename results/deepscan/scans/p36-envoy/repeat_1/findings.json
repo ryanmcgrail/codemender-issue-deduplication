@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "200139f5-e32f-5aa4-9b03-57d7fcbb69b1",
+    "session_id": "ChA2YTEwYjUwMDExMzliZmI0EAgaATAqBG1haW4",
+    "title": "Buffer Overflow in vclEndptCopy Due to Incorrect Copy Length into sin_addr and sin6_addr",
+    "file_path": "/home/jfplante_google_com/repos/p36-envoy_rep1/contrib/vcl/source/vcl_io_handle.cc",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "**Source**: Untrusted network clients connecting to Envoy via the VCL (VPP Com) socket interface trigger `VclIoHandle::accept(sockaddr* addr, socklen_t* addrlen)`.\n\n**Sanitization/Validation**: In `vclEndptCopy`, `*addrlen` is constrained using `std::min(sizeof(struct sockaddr_in), *addrlen)` for IPv4 and `std::min(sizeof(struct sockaddr_in6), *addrlen)` for IPv6. However, the copy destination is `\u0026addr4-\u003esin_addr` (which starts at offset 4 of `sockaddr_in`) or `\u0026addr6-\u003esin6_addr` (which starts at offset 8 of `sockaddr_in6`). Because the full sockaddr struct size (16 bytes or 28 bytes) is used as the copy length rather than the IP address field size (`sizeof(in_addr)` = 4 bytes, `sizeof(in6_addr)` = 16 bytes), the validation is completely erroneous.\n\n**Sink**: `memcpy(\u0026addr4-\u003esin_addr, ep.ip, *addrlen);` at line 52 and `memcpy(\u0026addr6-\u003esin6_addr, ep.ip, *addrlen);` at line 58.\n\n**Impact**: \n1. Memory buffer overflow: If the caller passes a `sockaddr_in` buffer (16 bytes), copying 16 bytes starting at byte offset 4 writes 20 bytes, causing a 4-byte buffer overflow beyond `addr`. For IPv6, copying 28 bytes starting at byte offset 8 into a 28-byte `sockaddr_in6` writes 36 bytes, causing an 8-byte buffer overflow beyond `addr`.\n2. Out-of-bounds read: `ep.ip` points to an IP address buffer populated by VCL (which may only contain 4 bytes for IPv4 or 16 bytes for IPv6), causing `memcpy` to read 16 or 28 bytes out-of-bounds from the source buffer.\n\n**Conceptual Exploit Payload**:\nAn external client initiates a TCP/IP connection to a listener using the VCL transport extension. When `accept()` is invoked with a `sockaddr_in` or `sockaddr_in6` allocated by the caller on the stack or heap, `vclEndptCopy` copies up to 16 bytes (IPv4) or 28 bytes (IPv6) starting at offset 4 (or 8), overflowing the allocated sockaddr struct by 4 or 8 bytes and corrupting adjacent stack/heap variables or control data.",
+    "snippet": "void vclEndptCopy(sockaddr* addr, socklen_t* addrlen, const vppcom_endpt_t\u0026 ep) {\n  if (ep.is_ip4) {\n    sockaddr_in* addr4 = reinterpret_cast\u003csockaddr_in*\u003e(addr);\n    addr4-\u003esin_family = AF_INET;\n    *addrlen = std::min(static_cast\u003cunsigned int\u003e(sizeof(struct sockaddr_in)), *addrlen);\n    memcpy(\u0026addr4-\u003esin_addr, ep.ip, *addrlen); // NOLINT(safe-memcpy)\n    addr4-\u003esin_port = ep.port;\n  } else {\n    sockaddr_in6* addr6 = reinterpret_cast\u003csockaddr_in6*\u003e(addr);\n    addr6-\u003esin6_family = AF_INET6;\n    *addrlen = std::min(static_cast\u003cunsigned int\u003e(sizeof(struct sockaddr_in6)), *addrlen);\n    memcpy(\u0026addr6-\u003esin6_addr, ep.ip, *addrlen); // NOLINT(safe-memcpy)\n    addr6-\u003esin6_port = ep.port;\n  }\n}",
+    "vuln_type": "CWE-120: Buffer Copy without Checking Size of Input ('Classic Buffer Overflow')",
+    "vuln_id": "CWE-120",
+    "status": "OPEN",
+    "start_line": 47,
+    "end_line": 61
+  },
+  {
+    "finding_id": "5c5aea74-2971-5d66-b757-94ff4e81a0d2",
+    "session_id": "ChBhODFmN2FjMDhhNDZiZmQ0EAgaATAqBG1haW4",
+    "title": "Out-of-bounds write and null-terminator corruption in JsonEscaper::escapeString",
+    "file_path": "/home/jfplante_google_com/repos/p36-envoy_rep1/source/common/common/json_escape_string.h",
+    "severity": "MEDIUM",
+    "confidence": 90,
+    "analysis": "In `JsonEscaper::escapeString`, the output string buffer is pre-allocated with length `input.size() + required_size`:\n`std::string result(input.size() + required_size, '\\\\');`\n\nWhen escaping a control character (0x00 to 0x1f):\n1. `sprintf(\u0026result[position + 1], \"u%04x\", static_cast\u003cint\u003e(character));` writes 6 bytes: the 'u' character, 4 hex digits, and a null terminator `\\0`.\n2. When the control character is at the end of the input string, `position + 6` equals `result.size()`. The null terminator from `sprintf` is written at index `result.size()`.\n3. Then, `position += 6;` and `result[position] = '\\\\';` writes a backslash character directly to `result[result.size()]`.\n\nIn C++, modifying `result[result.size()]` is undefined behavior and an out-of-bounds write that corrupts the null terminator of the `std::string`. Subsequent reads of `result.c_str()` or conversions to C-string will not find a terminating null character at the expected boundary, leading to out-of-bounds reads and potential memory corruption.\n\nConceptual Exploit Payload:\nAn untrusted client sends an HTTP request with an invalid header name ending in a control character (e.g. `foo\\x01: bar`). When `HeaderUtility::checkValidRequestHeaders` detects the invalid header, it invokes `JsonEscaper::escapeString(key, extra_length)` on the untrusted header name. The trailing `\\x01` causes `sprintf` and `result[position] = '\\\\'` to write past the valid string indices at `result[result.size()]`, overwriting the string's null terminator.",
+    "snippet": "        if (character == 0x00 || (character \u003e 0x00 \u0026\u0026 character \u003c= 0x1f)) {\n          // Print character as unicode hex.\n          sprintf(\u0026result[position + 1], \"u%04x\", static_cast\u003cint\u003e(character));\n          position += 6;\n          // Overwrite trailing null character.\n          result[position] = '\\\\';\n        }",
+    "vuln_type": "Buffer Overflow",
+    "vuln_id": "CWE-120",
+    "status": "OPEN",
+    "start_line": 67,
+    "end_line": 73
+  },
+  {
+    "finding_id": "5bd9512b-d06f-5c43-b71f-0ac6828fb602",
+    "session_id": "ChA2YTEwYjUwMDExMzliZmI0EAgaATAqBG1haW4",
+    "title": "Stack Out-of-bounds Read in vclEndptToAddress During Endpoint Conversion",
+    "file_path": "/home/jfplante_google_com/repos/p36-envoy_rep1/contrib/vcl/source/vcl_io_handle.cc",
+    "severity": "MEDIUM",
+    "confidence": 95,
+    "analysis": "**Source**: Untrusted network packets or connection data received via `VclIoHandle::recvmsg` (or socket address queries via `localAddress`/`peerAddress`). In `recvmsg`, `endpt.ip` is pointed to `uint8_t ipaddr[sizeof(absl::uint128)]`, which is a 16-byte stack buffer.\n\n**Sanitization/Validation**: In `vclEndptToAddress`, `len` is set to `sizeof(struct sockaddr_in)` (16 bytes) for IPv4 or `sizeof(struct sockaddr_in6)` (28 bytes) for IPv6. No bounds check is performed on the actual size of the source `ep.ip` buffer or the destination IP field.\n\n**Sink**: Lines 72 and 78:\n`memcpy(\u0026in4-\u003esin_addr, ep.ip, len);`\n`memcpy(\u0026in6-\u003esin6_addr, ep.ip, len);`\n\n**Impact**: \nFor IPv6 (`ep.is_ip4 == false`), `len` is 28 bytes (`sizeof(struct sockaddr_in6)`). When `recvmsg()` calls `vclEndptToAddress`, `ep.ip` points to `ipaddr`, an array of only 16 bytes (`sizeof(absl::uint128)`). `memcpy(\u0026in6-\u003esin6_addr, ep.ip, 28)` reads 28 bytes from a 16-byte buffer, causing a 12-byte out-of-bounds stack read (CWE-125). Uninitialized or sensitive stack memory following `ipaddr` is copied into `addr` and subsequently parsed into the network address object. Furthermore, copying 28 bytes starting at `\u0026in6-\u003esin6_addr` (offset 8 in `sockaddr_in6`) overwrites 28 bytes ending at offset 36, clobbering fields beyond `sin6_addr` (such as `sin6_scope_id`).\nFor IPv4, 16 bytes are read from `ep.ip` even though an IPv4 address is only 4 bytes (`sizeof(struct in_addr)`).\n\n**Conceptual Exploit Payload**:\nAn attacker sends UDP datagrams or messages processed by `VclIoHandle::recvmsg`. In `recvmsg`, `uint8_t ipaddr[sizeof(absl::uint128)]` (16 bytes) holds the endpoint IP address populated by `vppcom_session_recvfrom`. When an IPv6 packet is processed, `vclEndptToAddress` executes `memcpy(\u0026in6-\u003esin6_addr, ep.ip, 28)`, reading 12 bytes beyond the end of the `ipaddr` stack buffer, leaking uninitialized stack memory into the peer address instance.",
+    "snippet": "  if (ep.is_ip4) {\n    addr.ss_family = AF_INET;\n    len = sizeof(struct sockaddr_in);\n    auto in4 = reinterpret_cast\u003cstruct sockaddr_in*\u003e(\u0026addr);\n    memcpy(\u0026in4-\u003esin_addr, ep.ip, len); // NOLINT(safe-memcpy)\n    in4-\u003esin_port = ep.port;\n  } else {\n    addr.ss_family = AF_INET6;\n    len = sizeof(struct sockaddr_in6);\n    auto in6 = reinterpret_cast\u003cstruct sockaddr_in6*\u003e(\u0026addr);\n    memcpy(\u0026in6-\u003esin6_addr, ep.ip, len); // NOLINT(safe-memcpy)\n    in6-\u003esin6_port = ep.port;\n  }",
+    "vuln_type": "CWE-125: Out-of-bounds Read",
+    "vuln_id": "CWE-125",
+    "status": "OPEN",
+    "start_line": 68,
+    "end_line": 80
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "048fe2bf",
+    "severity": "HIGH",
+    "vuln_type": "CWE-488: Exposure of Data Element to Wrong Session",
+    "file_path": "packages/svelte/src/internal/server/render-context.js",
+    "title": "Cross-Request SSR Data Leakage via Shared Module-Scoped Render Context",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Cross-Request SSR Data Leakage via Shared Module-Scoped Render Context",
+    "snippet": ""
+  }
+]

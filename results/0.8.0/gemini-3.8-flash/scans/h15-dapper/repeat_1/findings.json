@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "f3b42bab-24b6-526a-8e9c-0116f142b8a0",
+    "session_id": "ChBjMDM0ZmVhNmM0MzBiYTMyEAgaATAqBG1haW4",
+    "title": "SQL Injection via Unsanitized Dynamic Parameter Names in Table.Insert",
+    "file_path": "/home/jfplante_google_com/repos/h15-dapper_rep1/Dapper.Rainbow/Database.cs",
+    "severity": "HIGH",
+    "confidence": 85,
+    "analysis": "Dapper.Rainbow's `Table\u003cT, TId\u003e.Insert` and `Table\u003cT, TId\u003e.Update` methods dynamically build SQL statements using parameter/column names obtained via `GetParamNames(o)`. When passed an instance of `DynamicParameters`, `GetParamNames` directly extracts parameter names via `parameters.ParameterNames.ToList()`. \n\nSource: Untrusted user input can populate parameter names when dynamic parameter dictionaries or schema-flexible inputs (e.g., from web API JSON payloads or query parameters) are supplied to `Table.Insert` or `Table.Update`.\nValidation/Sanitization: Neither `DynamicParameters` nor `Table\u003cT, TId\u003e.Insert`/`Update` validates or escapes column/parameter names (no square bracket escaping `[name]` or regex validation against identifier syntax).\nSink: Parameter names are concatenated directly into the raw SQL query string (`cols = string.Join(\",\", paramNames)` and `sql = \"set nocount on insert \" + TableName + \" (\" + cols + \") values (\" + colsParams + \") select cast(scope_identity() as int)\"`), which is executed via `database.Query\u003cint?\u003e(sql, o)`.\n\nConceptual Exploit Payload:\nAn attacker sends a JSON request with a malicious property name:\n```json\n{\n  \"ValidCol\": 1,\n  \"Foo) VALUES (1); DROP TABLE Users; --\": 2\n}\n```\nWhen parsed into a `DynamicParameters` collection and passed to `table.Insert(dynamicParams)`:\n`paramNames` contains `\"Foo) VALUES (1); DROP TABLE Users; --\"`, producing:\n`set nocount on insert MyTable (ValidCol,Foo) VALUES (1); DROP TABLE Users; --) values (@ValidCol,@Foo) VALUES (1); DROP TABLE Users; --) select cast(scope_identity() as int)`\nwhich executes the injected SQL commands.",
+    "snippet": "            public virtual int? Insert(dynamic data)\n            {\n                var o = (object)data;\n                List\u003cstring\u003e paramNames = GetParamNames(o);\n                paramNames.Remove(\"Id\");\n\n                string cols = string.Join(\",\", paramNames);\n                string colsParams = string.Join(\",\", paramNames.Select(p =\u003e \"@\" + p));\n                var sql = \"set nocount on insert \" + TableName + \" (\" + cols + \") values (\" + colsParams + \") select cast(scope_identity() as int)\";\n\n                return database.Query\u003cint?\u003e(sql, o).Single();\n            }",
+    "vuln_type": "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+    "vuln_id": "CWE-89",
+    "status": "OPEN",
+    "start_line": 58,
+    "end_line": 69
+  }
+]

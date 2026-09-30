@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "c03e5afc-52ff-5196-a646-dfda58925191",
+    "SessionID": "ChA0NTg2NzQ2MzNjMTI1YjU3EAgaATAqBG1haW4",
+    "Title": "Unauthenticated Server-Side Request Forgery (SSRF) via External Dashboard Snapshot Deletion",
+    "FilePath": "/home/jfplante_google_com/repos/p12-grafana_rep2/pkg/services/dashboardsnapshots/service.go",
+    "Severity": "MEDIUM",
+    "Confidence": 90,
+    "Analysis": "An unauthenticated Server-Side Request Forgery (SSRF) vulnerability exists in Grafana's external dashboard snapshot deletion functionality. \n\n### Data Flow Analysis:\n1. **Source**: An unauthenticated user can call the `GET /api/snapshots-delete/{deleteKey}` endpoint (handled by `DeleteDashboardSnapshotByDeleteKey` in `pkg/api/dashboard_snapshot.go`). This triggers `dashboardsnapshots.DeleteWithKey` using the provided `deleteKey`.\n2. **Sanitization/Validation**: The service retrieves the `DashboardSnapshot` corresponding to the `deleteKey` from the database. It then checks if the snapshot is external. If it is, it fetches `queryResult.ExternalDeleteURL` (which was stored when the external snapshot was created by the snapshot creator). No validation, sanitation, or restriction (such as checking for loopback/private IP ranges or protocol/port whitelisting) is performed on this URL.\n3. **Sink**: The `DeleteWithKey` helper calls `DeleteExternalDashboardSnapshot(queryResult.ExternalDeleteURL)`, which performs an HTTP GET request directly to the stored URL via `client.Get(externalUrl)`.\n\n### Impact \u0026 Conceptual Payload:\nIf snapshot creation is configured with an untrusted or compromised external snapshot server (or if snapshot public mode is enabled and an attacker can trick/influence the external snapshot server's response to store a malicious `deleteUrl` during creation), an attacker can supply an internal URL (e.g. `http://localhost:8080/` or `http://169.254.169.254/latest/meta-data/`). Later, anyone calling the unauthenticated deletion endpoint `GET /api/snapshots-delete/{deleteKey}` triggers a raw HTTP GET request to the target internal service, enabling intranet port scanning, metadata retrieval, or secondary exploitation of local APIs.\n\n### Conceptual Exploit Payload:\nTo trigger the SSRF, an unauthenticated user issues the following HTTP request:\n```http\nGET /api/snapshots-delete/\u003cmalicious_delete_key\u003e HTTP/1.1\nHost: \u003cgrafana-server\u003e\n```\nWhich triggers:\n```go\nclient.Get(\"http://127.0.0.1:8500/v1/agent/self\") // Internal Consul API or other target\n```",
+    "Snippet": "func DeleteExternalDashboardSnapshot(externalUrl string) error {\n\tresp, err := client.Get(externalUrl)\n\tif err != nil {\n\t\treturn err\n\t}\n\n\tdefer func() {\n\t\tif err := resp.Body.Close(); err != nil {\n\t\t\tplog.Warn(\"Failed to close response body\", \"err\", err)\n\t\t}\n\t}()\n\n\tif resp.StatusCode == 200 {\n\t\treturn nil\n\t}\n\n\t// Gracefully ignore \"snapshot not found\" errors as they could have already\n\t// been removed either via the cleanup script or by request.\n\tif resp.StatusCode == 500 {\n\t\tvar respJson map[string]any\n\t\tif err := json.NewDecoder(resp.Body).Decode(\u0026respJson); err != nil {\n\t\t\treturn err\n\t\t}\n\n\t\tif respJson[\"message\"] == \"Failed to get dashboard snapshot\" {\n\t\t\treturn nil\n\t\t}\n\t}\n\n\treturn fmt.Errorf(\"unexpected response when deleting external snapshot, status code: %d\", resp.StatusCode)\n}",
+    "VulnType": "Server-Side Request Forgery (SSRF)",
+    "VulnID": "CWE-918",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 125,
+    "EndLine": 155,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

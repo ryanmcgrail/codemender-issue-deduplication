@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "81d348d5",
+    "severity": "MEDIUM",
+    "vuln_type": "Information Exposure",
+    "file_path": "extensions/mentions/src/Formatter/FormatTagMentions.php",
+    "title": "Information Disclosure of Restricted Tags via Tag Mentions and Post Serialization",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Information Disclosure of Restricted Tags via Tag Mentions and Post Serialization",
+    "snippet": ""
+  },
+  {
+    "finding_id": "0aaa6ba6",
+    "severity": "MEDIUM",
+    "vuln_type": "Information Exposure",
+    "file_path": "extensions/mentions/src/Formatter/FormatGroupMentions.php",
+    "title": "Information Disclosure of Hidden Groups via Group Mentions and Post Serialization",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Information Disclosure of Hidden Groups via Group Mentions and Post Serialization",
+    "snippet": ""
+  }
+]

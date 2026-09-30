@@ -1,0 +1,47 @@
+[
+  {
+    "finding_id": "e970b744-f4e2-53c4-9c9d-75eb20fb6950",
+    "session_id": "ChAyODFjZjg0NjY3NTMyZDQzEAgaATAqBG1haW4",
+    "title": "Stored Cross-Site Scripting (XSS) via Unsanitized href in UrlField",
+    "file_path": "/home/jfplante_google_com/repos/p09-react-admin_rep1/packages/ra-ui-materialui/src/field/UrlField.tsx",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Path:\n- Source: Untrusted data from a data provider (e.g., API response, database records, CSV upload, or URL search query parameters like '?source=...') containing user-controlled fields.\n- Sanitization/Validation: None. UrlField extracts the field value from the record via `get(record, source)` and performs no sanitization or URL scheme validation (such as ensuring the URL begins with a safe scheme like 'http://' or 'https://' or blocking 'javascript:').\n- Sink: The unsanitized URL string is passed directly to Material UI's `\u003cLink href={value}\u003e` component on line 36, which renders an HTML `\u003ca\u003e` tag with the user-controlled `href` attribute.\n\nImpact:\nWhen an administrator or user views a record with a malicious URL and clicks the link in a list or detail view, the `javascript:` payload executes in the victim's browser session with the victim's privileges. This enables stored Cross-Site Scripting (XSS), session hijacking, and arbitrary actions within the admin interface.\n\nConceptual Exploit Payload:\nA record stored in the backend database or returned by a REST/GraphQL endpoint containing:\n```json\n{\n  \"id\": 123,\n  \"website\": \"javascript:alert(document.domain)\"\n}\n```\nWhen rendered with `\u003cUrlField source=\"website\" /\u003e`, the component generates:\n```html\n\u003ca href=\"javascript:alert(document.domain)\"\u003ejavascript:alert(document.domain)\u003c/a\u003e\n```\nClicking the link triggers script execution in the context of the application.",
+    "snippet": "    return (\n        \u003cLink\n            className={className}\n            href={value}\n            onClick={stopPropagation}\n            variant=\"body2\"\n            {...sanitizeFieldRestProps(rest)}\n        \u003e\n            {value}\n        \u003c/Link\u003e\n    );",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 33,
+    "end_line": 43
+  },
+  {
+    "finding_id": "165fe6b9-621e-59ad-a775-25f4cf9e169e",
+    "session_id": "ChAyODFjZjg0NjY3NTMyZDQzEAgaATAqBG1haW4",
+    "title": "Stored Cross-Site Scripting (XSS) via Unsanitized href in FileField",
+    "file_path": "/home/jfplante_google_com/repos/p09-react-admin_rep1/packages/ra-ui-materialui/src/field/FileField.tsx",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "Data Path:\n- Source: Untrusted data from a data provider (e.g., API response, database records, CSV import) containing file URL values.\n- Sanitization/Validation: None. FileField retrieves `sourceValue` from `record` via `get(record, source)` and performs no protocol check or scheme validation (e.g. against 'javascript:' pseudoprotocols).\n- Sink: The unsanitized value is converted to string and supplied directly as the `href` prop of Material UI's `\u003cLink href={sourceValue?.toString()}\u003e` component on line 95 (and similarly line 72 for array fields), which renders an HTML `\u003ca\u003e` tag.\n\nImpact:\nWhen an administrator clicks the link intended to download or view a file, a malicious `javascript:` URI executes script in the user's browser, leading to stored Cross-Site Scripting (XSS).\n\nConceptual Exploit Payload:\nA record stored in the backend database:\n```json\n{\n  \"id\": 1,\n  \"attachment\": \"javascript:alert(document.domain)\",\n  \"title\": \"Invoice.pdf\"\n}\n```\nWhen rendered with `\u003cFileField source=\"attachment\" title=\"title\" /\u003e`, the component generates:\n```html\n\u003ca href=\"javascript:alert(document.domain)\" title=\"Invoice.pdf\"\u003eInvoice.pdf\u003c/a\u003e\n```\nClicking the file link executes the JavaScript code in the user's browser context.",
+    "snippet": "            \u003cLink\n                href={sourceValue?.toString()}\n                title={titleValue}\n                target={target}\n                download={download}\n                ping={ping}\n                rel={rel}\n                variant=\"body2\"\n            \u003e\n                {titleValue}\n            \u003c/Link\u003e",
+    "vuln_type": "Cross-Site Scripting (XSS)",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 94,
+    "end_line": 104
+  },
+  {
+    "finding_id": "9e67eb52-4c05-55ed-af74-e6a5929c5020",
+    "session_id": "ChAyODFjZjg0NjY3NTMyZDQzEAgaATAqBG1haW4",
+    "title": "Improper URL Validation via Missing Anchor in UrlRegexp leading to Type Inference Bypass",
+    "file_path": "/home/jfplante_google_com/repos/p09-react-admin_rep1/packages/ra-core/src/inference/assertions.ts",
+    "severity": "MEDIUM",
+    "confidence": 100,
+    "analysis": "Data Path:\n- Source: Untrusted data strings from API endpoints, databases, or user-uploaded CSV files processed by type inference mechanisms (used in ListGuesser, ShowGuesser, EditGuesser, and ra-no-code).\n- Sanitization/Validation: `assertions.ts` defines `UrlRegexp = /http(s*):\\/\\/.*/i` to validate whether string values represent URLs. The regular expression lacks start anchors (`^`), meaning any string containing `http://` or `https://` anywhere within it will match `isUrl(value)` and pass `valuesAreUrl(values)`. Furthermore, `(s*)` matches zero or more 's' characters arbitrarily.\n- Sink: When `valuesAreUrl(values)` evaluates to `true`, `inferTypeFromValues` assigns the element type as `'url'`. In `ListGuesser`, `ShowGuesser`, and `ra-no-code`, elements typed as `'url'` are rendered using `\u003cUrlField\u003e`, which passes the string directly into `\u003cLink href={value}\u003e` without sanitization, leading to arbitrary JavaScript execution when the resulting link is clicked.\n\nImpact:\nAn attacker can craft malicious payload strings such as `javascript:alert(1)//https://example.com` in data records. Because `UrlRegexp` is unanchored, the validation logic erroneously classifies the field as a valid URL instead of a plain string (`TextField`), causing guessers and no-code components to generate clickable links containing JavaScript execution payloads.\n\nConceptual Exploit Payload:\nA data record containing a custom property:\n```json\n{\n  \"id\": 1,\n  \"custom_link\": \"javascript:alert(document.cookie)//https://example.com\"\n}\n```\nEvaluating `UrlRegexp.test(\"javascript:alert(document.cookie)//https://example.com\")` returns `true`. `inferTypeFromValues('custom_link', [...])` returns `{ type: 'url', props: { source: 'custom_link' } }`, which `ListGuesser` renders as `\u003cUrlField source=\"custom_link\" /\u003e`, yielding an executable JavaScript link.",
+    "snippet": "const UrlRegexp = /http(s*):\\/\\/.*/i;\nexport const isUrl = (value: any) =\u003e !value || UrlRegexp.test(value);\nexport const valuesAreUrl = (values: any[]) =\u003e values.every(isUrl);",
+    "vuln_type": "Improper Input Validation",
+    "vuln_id": "CWE-20",
+    "status": "OPEN",
+    "start_line": 26,
+    "end_line": 28
+  }
+]

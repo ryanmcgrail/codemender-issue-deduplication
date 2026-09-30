@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "580681b3",
+    "severity": "MEDIUM",
+    "vuln_type": "Open Redirect",
+    "file_path": "pkg/api/dashboard/dashboard.go",
+    "title": "Open Redirect in Dashboard via X-Forwarded-Prefix Header Validation Bypass",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Open Redirect in Dashboard via X-Forwarded-Prefix Header Validation Bypass",
+    "snippet": ""
+  }
+]

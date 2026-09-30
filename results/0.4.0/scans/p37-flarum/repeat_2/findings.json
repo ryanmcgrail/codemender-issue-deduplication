@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "90de5059-4432-50cb-a355-6b180e9f39b7",
+    "SessionID": "ChA0YTU0Yjk5OWI1ZGU2NWRhEAgaATAqBG1haW4",
+    "Title": "Path Repository Injection via Composer JSON Configuration",
+    "FilePath": "extensions/package-manager/src/Api/Controller/ConfigureComposerController.php",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "An authenticated administrator of the Flarum forum can run arbitrary local Composer command-line options and parameters or local path repositories by calling the `ConfigureComposerController` controller. When registering custom Composer repositories via `/api/package-manager/composer`, the validator `ConfigureComposerValidator` does not perform strict sanitization or restrictions on the `url` parameter of `path` type repositories. \n\nBecause Flarum's `package-manager` extension invokes `Composer\\\\Console\\\\Application::run` to execute Composer operations directly inside the PHP process, an administrator can declare a path repository pointing to any directory, including those containing arbitrary `composer.json` files or executable PHP code. Additionally, using standard Composer options (or features of path repositories), the attacker can execute hooks, symlink local files, or force the installation of malicious packages from local sources, leading to potential security boundaries issues (since the administrative privileges on the forum are being translated to arbitrary file write / path resolution capabilities on the underlying system, and allowing Composer to run on raw paths).\n\n### Conceptual Exploit Payload\n\nAn administrator sends the following request to add a custom path repository:\n\n```http\nPOST /api/package-manager/composer HTTP/1.1\nHost: target.flarum.local\nContent-Type: application/json\nAuthorization: Token \u003cvalid_admin_token\u003e;userId=1\n\n{\n  \"type\": \"composer\",\n  \"data\": {\n    \"repositories\": [\n      {\n        \"type\": \"path\",\n        \"url\": \"/var/tmp/malicious-extension\"\n      }\n    ]\n  }\n}\n```\n\nFollowed by requiring the extension:\n\n```http\nPOST /api/package-manager/extensions HTTP/1.1\nHost: target.flarum.local\nContent-Type: application/json\nAuthorization: Token \u003cvalid_admin_token\u003e;userId=1\n\n{\n  \"data\": {\n    \"package\": \"malicious/extension\"\n  }\n}\n```\n\nThis instructs the application to load the package from `/var/tmp/malicious-extension`, executing any composer plugins or scripts during installation.",
+    "Snippet": "    protected function composerConfig(ServerRequestInterface $request): array\n    {\n        $data = Arr::only(Arr::get($request-\u003egetParsedBody(), 'data') ?? [], $this-\u003econfigurable);\n\n        $this-\u003evalidator-\u003eassertValid(['composer' =\u003e $data]);\n        $composerJson = $this-\u003ecomposerJson-\u003eget();\n\n        if (! empty($data)) {\n            foreach ($data as $key =\u003e $value) {\n                Arr::set($composerJson, $key, $value);\n            }\n\n            // Always prefer stable releases.\n            $composerJson['prefer-stable'] = true;\n\n            $this-\u003ecomposerJson-\u003eset($composerJson);\n        }\n\n        return Arr::only($composerJson, $this-\u003econfigurable);\n    }",
+    "VulnType": "Injection",
+    "VulnID": "CWE-20",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 86,
+    "EndLine": 105,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

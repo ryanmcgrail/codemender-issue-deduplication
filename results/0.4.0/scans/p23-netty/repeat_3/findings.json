@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "08b33f4c-0e88-5e64-80dc-d6fbae6ad930",
+    "SessionID": "ChA3MDhjNWZjZjVlODI0ZjI4EAgaATAqBG1haW4",
+    "Title": "Insecure Temporary File Creation Permissions and Race Condition in PlatformDependent.createTempFile",
+    "FilePath": "common/src/main/java/io/netty/util/internal/PlatformDependent.java",
+    "Severity": "MEDIUM",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability Analysis\nThe class `io.netty.util.internal.PlatformDependent` contains a vulnerability in `createTempFile` where temporary files are created with insecure permissions or restricted in a race-prone way. \n\n#### Trace:\n1. **Source**: An untrusted remote user uploads a file/attribute via an HTTP POST multipart request.\n2. **Sanitization/Validation**: The request decoder handles files or attributes by instantiating subclasses of `AbstractDiskHttpData` (such as `DiskFileUpload` or `DiskAttribute`). No check on the directory permissions is done.\n3. **Sink**: `AbstractDiskHttpData` creates a temporary file by calling `PlatformDependent.createTempFile`.\n4. **Flaw**:\n   - If `javaVersion() \u003e= 7` and a custom base directory is supplied (`directory != null`), `Files.createTempFile(directory.toPath(), prefix, suffix)` is called without POSIX permissions `FileAttribute` settings. The file's permissions are inherited from the parent directory by default. If the parent directory is shared (e.g. `/tmp` or a custom uploads directory), other local users can read or write the file.\n   - If `javaVersion() \u003c 7`, `PlatformDependent.createTempFile` creates the temporary file via `File.createTempFile(...)` and changes permissions *after* creation using `file.setReadable(...)`. This creates a Time-of-Check to Time-of-Use (TOCTOU) race condition during which the file is accessible to local attackers. Additionally, the code fails to restrict write permissions (missing `setWritable(false, false)`).\n\n### Conceptual Exploit Payload\nA local attacker monitors the `/tmp` directory or custom shared upload directory for files matching the pattern `FUp_*` or `Attr_*`. \n1. Since `Files.createTempFile(directory.toPath(), prefix, suffix)` inherits permissions when `directory` is set, or because of the post-creation race condition in Java 6 fallback, the attacker can immediately open the file for reading and writing before the application writes the upload contents or restricts permissions.\n2. The attacker can read sensitive uploaded data or replace the contents with malicious files/scripts, leading to local information disclosure or local privilege escalation.",
+    "Snippet": "    @SuppressJava6Requirement(reason = \"Guarded by version check\")\n    public static File createTempFile(String prefix, String suffix, File directory) throws IOException {\n        if (javaVersion() \u003e= 7) {\n            if (directory == null) {\n                return Files.createTempFile(prefix, suffix).toFile();\n            }\n            return Files.createTempFile(directory.toPath(), prefix, suffix).toFile();\n        }\n        final File file;\n        if (directory == null) {\n            file = File.createTempFile(prefix, suffix);\n        } else {\n            file = File.createTempFile(prefix, suffix, directory);\n        }\n\n        // Try to adjust the perms, if this fails there is not much else we can do...\n        if (!file.setReadable(false, false)) {\n            throw new IOException(\"Failed to set permissions on temporary file \" + file);\n        }\n        if (!file.setReadable(true, true)) {\n            throw new IOException(\"Failed to set permissions on temporary file \" + file);\n        }\n        return file;\n    }",
+    "VulnType": "Insecure Temporary File (CWE-377 / CWE-378 / CWE-732)",
+    "VulnID": "CWE-377",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 1509,
+    "EndLine": 1531,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

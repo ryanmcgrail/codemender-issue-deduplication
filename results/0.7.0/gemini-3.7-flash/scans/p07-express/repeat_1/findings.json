@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "ceba61bd",
+    "severity": "HIGH",
+    "vuln_type": "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+    "file_path": "lib/response.js",
+    "title": "Cross-Site Scripting (XSS) in res.redirect() via javascript: URLs",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Cross-Site Scripting (XSS) in res.redirect() via javascript: URLs",
+    "snippet": ""
+  }
+]

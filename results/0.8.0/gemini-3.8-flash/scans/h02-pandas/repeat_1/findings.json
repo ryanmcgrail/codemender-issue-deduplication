@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "2ccb94a4-c19e-5d12-b20f-905a221af94c",
+    "session_id": "ChAwZWRmNGEzNzFjMGY0YzYxEAgaATAqBG1haW4",
+    "title": "XML External Entity (XXE) Injection in pandas.read_xml via lxml parser",
+    "file_path": "/home/jfplante_google_com/repos/h02-pandas_rep1/pandas/io/xml.py",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Data Flow Analysis\n- **Source**: Untrusted XML document provided to `pandas.read_xml(path_or_buffer, ...)` as a file path, URL, `io.StringIO`, `io.BytesIO`, or buffer.\n- **Sanitization/Validation**: None. The XML data is decoded/wrapped by `get_data_from_filepath` and `preprocess_data` without any sanitization or stripping of DTD declarations or external entity definitions.\n- **Sink**: In `_LxmlFrameParser._parse_doc` (`pandas/io/xml.py`, lines 638-653), `lxml.etree.XMLParser(encoding=self.encoding)` is instantiated without `resolve_entities=False`. In `lxml`, `resolve_entities` defaults to `True`. The parser is then passed to `lxml.etree.parse` or `lxml.etree.fromstring` to parse the untrusted XML data.\n\n### Impact\nAn external attacker who can supply untrusted XML to `pandas.read_xml` can achieve XML External Entity (XXE) injection. This allows reading arbitrary local files from the host system where the pandas code is executing (e.g. `/etc/passwd`, credentials, application source code) as the parsed XML entities are populated directly into DataFrame rows and columns. It can also lead to Denial of Service via XML quadratic blowup / entity expansion bombs (Billion Laughs) and Server-Side Request Forgery (SSRF).\n\n### Conceptual Exploit Payload\n```python\nimport io\nimport pandas as pd\n\nxxe_payload = io.StringIO('''\u003c?xml version=\"1.0\" encoding=\"utf-8\"?\u003e\n\u003c!DOCTYPE data [\n  \u003c!ENTITY xxe SYSTEM \"file:///etc/passwd\"\u003e\n]\u003e\n\u003cdata\u003e\n  \u003crow\u003e\n    \u003csecret\u003e\u0026xxe;\u003c/secret\u003e\n  \u003c/row\u003e\n\u003c/data\u003e''')\n\n# When loaded with default parser='lxml'\ndf = pd.read_xml(xxe_payload)\n# The DataFrame now contains sensitive file content:\nprint(df['secret'].iloc[0])\n```",
+    "snippet": "        with preprocess_data(handle_data) as xml_data:\n            curr_parser = XMLParser(encoding=self.encoding)\n\n            if isinstance(xml_data, io.StringIO):\n                if self.encoding is None:\n                    raise TypeError(\n                        \"Can not pass encoding None when input is StringIO.\"\n                    )\n\n                document = fromstring(\n                    xml_data.getvalue().encode(self.encoding), parser=curr_parser\n                )\n            else:\n                document = parse(xml_data, parser=curr_parser)",
+    "vuln_type": "XML External Entity (XXE)",
+    "vuln_id": "CWE-611",
+    "status": "OPEN",
+    "start_line": 638,
+    "end_line": 653
+  }
+]

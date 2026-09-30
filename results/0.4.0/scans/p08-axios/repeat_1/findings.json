@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "1845d5fb-8b35-5a47-b405-2f1c72b2c397",
+    "SessionID": "ChA0OWZhNzA0NDMzNGQ3M2M5EAgaATAqBG1haW4",
+    "Title": "Regular Expression Injection in Cookie Reader (ReDoS)",
+    "FilePath": "lib/helpers/cookies.js",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "The `cookies.read()` function in `lib/helpers/cookies.js` reads a cookie value by passing a user-controlled cookie name parameter `name` directly into the `RegExp` constructor without escaping/sanitization:\n```javascript\nread(name) {\n  const match = document.cookie.match(new RegExp('(^|;\\\\\\\\s*)(' + name + ')=([^;]*)'));\n  return (match ? decodeURIComponent(match[3]) : null);\n}\n```\nIf an attacker can control or influence the `xsrfCookieName` option via request options (e.g., in a multi-tenant or client-configured request setup), or if the `name` parameter is derived from untrusted user input elsewhere, they can perform a Regular Expression injection (ReDoS) or cause unintended matching behavior.\n\nSpecifically, in Axios request flow:\n1. Untrusted user config configures `xsrfCookieName` to a malicious regular expression payload (e.g., containing complex backtracking like `(a+)+`).\n2. This option is mapped to `xsrfCookieName` and passed to `cookies.read(xsrfCookieName)` inside `resolveConfig.js` (line 47).\n3. The malicious regex is concatenated and compiled inside `new RegExp(...)` (line 23) in `lib/helpers/cookies.js`, triggering a denial-of-service or logic bypass if matched against a crafted `document.cookie` string.\n\nConceptual Exploit Payload:\nSetting `xsrfCookieName` config option to a string containing regex metacharacters, e.g.:\n```javascript\naxios.get('/api', {\n  xsrfCookieName: '((a+)+)*'\n});\n```\nThis gets concatenated inside `new RegExp('(^|;\\\\s*)(((a+)+)*)=([^;]*)')` and executed against `document.cookie`, leading to catastrophic backtracking if matching a long, specifically structured cookie string.",
+    "Snippet": "    read(name) {\n      const match = document.cookie.match(new RegExp('(^|;\\\\\\\\s*)(' + name + ')=([^;]*)'));\n      return (match ? decodeURIComponent(match[3]) : null);\n    },",
+    "VulnType": "Insecure RegExp construction (ReDoS / Logic bypass)",
+    "VulnID": "CWE-400",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 22,
+    "EndLine": 25,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

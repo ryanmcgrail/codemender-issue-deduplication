@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "8694ff6f-6d6c-5284-a2d7-b12ba8393073",
+    "session_id": "ChA4ZGE2OTNmNjRmMDM5NjA0EAgaATAqBG1haW4",
+    "title": "Missing Authentication/Verification on Mailpace Webhook",
+    "file_path": "app/controllers/webhooks_controller.rb",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "An attacker can make unauthenticated HTTP POST requests to `/webhooks/mailpace` and bypass all signature/origin validation. By constructing a spoofed payload with a known or guessed `message_id` and the target user's `to_address`, the attacker can repeatedly trigger a bounced event, increasing the target's bounce score. This eventually triggers email revocation once the bounce score exceeds the threshold, disabling future emails to the victim.\n\n### Conceptual Exploit Payload\n\n```http\nPOST /webhooks/mailpace HTTP/1.1\nHost: discourse.example.com\nContent-Type: application/json\n\n{\n  \"payload\": {\n    \"message_id\": \"\u003cpredictable_or_known_message_id_here\u003e\",\n    \"to\": \"victim_email@example.com\",\n    \"status\": \"bounced\"\n  }\n}\n```",
+    "snippet": "  def mailpace\n    # see https://docs.mailpace.com/guide/webhooks#email-events\n\n    message_id = Email::MessageIdService.message_id_clean(params[\"payload\"][\"message_id\"])\n    to_address = params[\"payload\"][\"to\"]\n    status = params[\"payload\"][\"status\"]\n\n    case status\n    when \"bounced\"\n      process_bounce(message_id, to_address, SiteSetting.hard_bounce_score)\n    when \"deferred\"\n      process_bounce(message_id, to_address, SiteSetting.soft_bounce_score)\n    end\n\n    success\n  end",
+    "vuln_type": "CWE-306: Missing Authentication for Critical Function",
+    "vuln_id": "CWE-306",
+    "status": "OPEN",
+    "start_line": 67,
+    "end_line": 82
+  }
+]

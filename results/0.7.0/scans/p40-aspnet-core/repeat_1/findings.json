@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "e1ebdcc3-5de7-5f9f-b0ff-2d86b628db78",
+    "session_id": "ChAyMDE5YjJhZWY0MjY2MDZiEAgaATAqBG1haW4",
+    "title": "Reflected Cross-Site Scripting (XSS) in Blazor WebAssembly Debugging Target Picker UI",
+    "file_path": "/home/jfplante_google_com/repos/p40-aspnet-core_rep1/src/Components/WebAssembly/Server/src/TargetPickerUi.cs",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "The Blazor WebAssembly debugging middleware maps the `/_framework/debug` endpoint. When a request is made, `TargetPickerUi.Display` reads the `url` query parameter as `targetApplicationUrl`. If retrieving debuggable browser tabs fails (e.g., if the browser isn't currently running with remote debugging active), an exception is caught. In the `catch` block, the raw, unencoded `targetApplicationUrl` is passed to `GetLaunchChromeInstructions` and `GetLaunchEdgeInstructions` and then directly written into the HTTP response stream with `ContentType = \"text/html\"`. This allows an attacker to execute arbitrary JavaScript in the context of the user's browser by crafting a malicious link with HTML/JS payload in the `url` parameter.\n\n### Conceptual Exploit Payload:\n```http\nGET /_framework/debug?url=%3C/code%3E%3Cscript%3Ealert(document.domain)%3C/script%3E HTTP/1.1\nHost: localhost:5000\n```\nWhen this request is processed and `GetOpenedBrowserTabs()` fails (which is the default behavior if the developer hasn't manually opened a debugging port on Chromium), the unencoded payload in the `url` query parameter is rendered inside the instruction templates and sent back to the client as HTML, executing the script.",
+    "snippet": "            await context.Response.WriteAsync($@\"\n\u003ch1\u003eUnable to find debuggable browser tab\u003c/h1\u003e\n\u003cp\u003e\n    Could not get a list of browser tabs from \u003ccode\u003e{debuggerTabsListUrl}\u003c/code\u003e.\n    Ensure your browser is running with debugging enabled.\n\u003c/p\u003e\n\u003ch2\u003eResolution\u003c/h2\u003e\n\u003cp\u003e\n    \u003ch4\u003eIf you are using Google Chrome or Chromium for your development, follow these instructions:\u003c/h4\u003e\n    {GetLaunchChromeInstructions(targetApplicationUrl.ToString())}\n\u003c/p\u003e\n\u003cp\u003e\n    \u003ch4\u003eIf you are using Microsoft Edge (80+) for your development, follow these instructions:\u003c/h4\u003e\n    {GetLaunchEdgeInstructions(targetApplicationUrl.ToString())}\n\u003c/p\u003e\n\u003cstrong\u003eThis should launch a new browser window with debugging enabled..\u003c/p\u003e\n\u003ch2\u003eUnderlying exception:\u003c/h2\u003e\n\u003cpre\u003e{ex}\u003c/pre\u003e\n                \");",
+    "vuln_type": "CWE-79",
+    "vuln_id": "CWE-79",
+    "status": "OPEN",
+    "start_line": 279,
+    "end_line": 297
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "abfcf6d1-2edf-58bc-8de7-b585e67928d8",
+    "SessionID": "ChBjZDI2MzRmZWRkMGNlYTUxEAgaATAqBG1haW4",
+    "Title": "CRLF and HTTP Header Injection via AxiosHeaders String Parser Bypass",
+    "FilePath": "/home/jfplante_google_com/repos/p08-axios_rep2/lib/core/AxiosHeaders.js",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Source\nUntrusted user input used as a header key (or raw headers string) inside request configuration or `headers.set(key, value)`.\n\n### Sanitization/Validation\nThe `isValidHeaderName` check is used to validate the header name, but if it fails, instead of rejecting the invalid name, the code falls back to parsing the invalid name string using `parseHeaders(header)`.\n\n### Sink\n`setHeaders` registers the multiple split header keys onto the request options, which are then serialized and sent by the HTTP adapter, bypassing Node.js-level CRLF validation (since Node.js receives separate, valid header properties).\n\n### Conceptual Exploit Payload\nAn attacker sends an HTTP query parameter:\n`?userHeader=Content-Type:%20application/json%0aCookie:%20session=attacker-controlled`\n\nAnd the application sets the headers:\n```javascript\naxios.get('/api', {\n  headers: {\n    [req.query.userHeader]: 'value'\n  }\n});\n```\n\nThis causes `AxiosHeaders.set` to receive the string `Content-Type: application/json\\nCookie: session=attacker-controlled`.\nSince this string contains spaces, colons, and newlines, it fails `isValidHeaderName` and triggers `parseHeaders(...)`.\n`parseHeaders` splits the string on `\\n`, producing:\n```json\n{\n  \"content-type\": \"application/json\",\n  \"cookie\": \"session=attacker-controlled\"\n}\n```\n\nBoth headers are then set on the request. Since Node.js receives a clean object with two separate properties, it serializes them without throwing any CRLF errors, successfully injecting the `Cookie` header.",
+    "Snippet": "    } else if(utils.isString(header) \u0026\u0026 (header = header.trim()) \u0026\u0026 !isValidHeaderName(header)) {\n      setHeaders(parseHeaders(header), valueOrRewrite);",
+    "VulnType": "CRLF Injection",
+    "VulnID": "CWE-113",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 101,
+    "EndLine": 102,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

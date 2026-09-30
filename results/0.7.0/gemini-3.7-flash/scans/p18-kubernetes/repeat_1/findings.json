@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "804d2011",
+    "severity": "HIGH",
+    "vuln_type": "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')",
+    "file_path": "pkg/kubelet/kubelet_server_journal_windows.go",
+    "title": "Command Injection in Windows Kubelet Node Log Query via Pattern Parameter",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Command Injection in Windows Kubelet Node Log Query via Pattern Parameter",
+    "snippet": ""
+  }
+]

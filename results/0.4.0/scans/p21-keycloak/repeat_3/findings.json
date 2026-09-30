@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "bd00b847-9372-5044-921a-323c548f7ff2",
+    "SessionID": "ChA5ZWMxOTRiYTU5YTBlZmMwEAgaATAqBG1haW4",
+    "Title": "Open Redirect via Wildcard Redirect URI Validation Bypass",
+    "FilePath": "services/src/main/java/org/keycloak/protocol/oidc/utils/RedirectUtils.java",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "**Source**:\nThe `redirect_uri` query parameter supplied by the user/attacker in the OIDC authorization endpoint.\n\n**Sanitization/Validation**:\nIn `RedirectUtils.java`, the `verifyRedirectUri` method validates the user-supplied `redirect_uri` parameter. When comparing against a client-configured redirect URI that uses a wildcard suffix (e.g. `https://test*` or `https://example.com/app*`), it performs a simple `.startsWith()` check after stripping the `*` character.\n\n**Sink**:\nThe validation uses `r.startsWith(validRedirect)` to approve the redirection. When the wildcard is placed directly at the end of a domain name or path prefix without a trailing slash (e.g. `https://example.com*`), an attacker can construct a domain starting with that prefix (e.g. `https://example.com.attacker.com`) and bypass the validation check. This allows them to steal the authorization code via open redirection.\n\n**Conceptual Exploit Payload**:\nConsider a client configured with the valid redirect URI pattern `https://example.com*`.\nAn attacker can initiate the OIDC authorization flow with:\n`GET /realms/{realm}/protocol/openid-connect/auth?client_id={client_id}\u0026response_type=code\u0026redirect_uri=https://example.com.attacker.com/oauth2/callback\u0026state=mystate`\n\nDuring validation:\n1. `validRedirect` is `https://example.com*`.\n2. Truncation yields `https://example.com`.\n3. `redirect_uri` is `https://example.com.attacker.com/oauth2/callback`.\n4. `redirect_uri.startsWith(\"https://example.com\")` evaluates to `true`.\n5. Keycloak redirects the user to `https://example.com.attacker.com/oauth2/callback?code=AUTH_CODE\u0026state=mystate`, exposing the authorization code to the attacker.",
+    "Snippet": "            } else if (validRedirect.endsWith(\"*\") \u0026\u0026 !validRedirect.contains(\"?\") \u0026\u0026 allowWildcards) {\n                // strip off the query or fragment components - we don't check them when wildcards are effective\n                int idx = redirect.indexOf('?');\n                if (idx == -1) {\n                    idx = redirect.indexOf('#');\n                }\n                String r = idx == -1 ? redirect : redirect.substring(0, idx);\n                // strip off *\n                int length = validRedirect.length() - 1;\n                validRedirect = validRedirect.substring(0, length);\n                if (r.startsWith(validRedirect)) return validRedirect;",
+    "VulnType": "CWE-601",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 209,
+    "EndLine": 219,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

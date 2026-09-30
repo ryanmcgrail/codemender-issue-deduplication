@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "22395e9f-2074-5e95-a090-f52a50361523",
+    "SessionID": "ChBjNjYxNTA0YjBiZTYwODJmEAgaATAqBG1haW4",
+    "Title": "Endless Loop in Brotli Decompressor via Redundant Trailer Split Across Buffer Slices",
+    "FilePath": "/home/jfplante_google_com/repos/p36-envoy_rep6/source/extensions/compression/brotli/decompressor/brotli_decompressor_impl.cc",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "### Vulnerability Analysis\nAn uncontrolled resource consumption vulnerability (infinite loop) exists in Envoy's Brotli decompressor (`BrotliDecompressorImpl`). When a client sends a request compressed with Brotli containing redundant input (extra bytes after the end of the valid Brotli stream) split across multiple buffer slices, the decompressor enters an infinite loop, causing high CPU usage and denial of service (DoS).\n\n#### Data Flow\n1. **Source**: An untrusted HTTP request sent by a client to Envoy containing `Content-Encoding: br` (or `Accept-Encoding: br` for upstream/downstream responses) with a body split into multiple buffer slices.\n2. **Sink**: `BrotliDecompressorImpl::decompress()` in `source/extensions/compression/brotli/decompressor/brotli_decompressor_impl.cc`.\n3. **Bypass of Sanitization**:\n   - The first slice contains the complete valid Brotli payload. It is decoded successfully, and the decoder transitions to the finished/success state.\n   - The second slice contains redundant data (extra bytes after the valid stream ends). `decompress()` sets `ctx.avail_in_` to the second slice's length (which is greater than 0) and calls `process()`.\n   - `BrotliDecoderDecompressStream` is called with the finished decoder state, which returns `BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT` because it has already finished decompressing the stream.\n   - In production builds, the sanity check `ASSERT(ctx.avail_in_ == 0)` is compiled out (as assertions are disabled in release).\n   - The code falls through to the `BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT` case, performs an output flush update (which is a no-op if `avail_out_` is not 0), and returns `true`.\n   - Since `process()` returned `true` but `ctx.avail_in_` remained greater than 0 (no input was consumed), the `while (ctx.avail_in_ \u003e 0)` loop in `decompress()` is executed again with the exact same state, leading to a permanent infinite loop.\n\n### Conceptual Exploit Payload\nA conceptual exploit payload involves sending an HTTP request with the following characteristics:\n1. **Headers**:\n   ```http\n   POST /path HTTP/1.1\n   Host: target.example.com\n   Content-Encoding: br\n   Transfer-Encoding: chunked\n   ```\n2. **Body (sent in two distinct HTTP chunks/slices)**:\n   - **Chunk 1**: A valid, small Brotli-compressed payload (e.g., compressed string \"hello\").\n   - **Chunk 2**: Redundant trailing bytes (e.g., `\\x00\\x00\\x00`) immediately following the valid stream.\n   When Envoy processes the second chunk via `decompress()`, it will loop infinitely, hanging the worker thread and exhausting CPU resources.",
+    "Snippet": "  case BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT:\n    ASSERT(ctx.avail_in_ == 0);\n    FALLTHRU;\n  case BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT:",
+    "VulnType": "Loop with Unreachable Exit Condition ('Infinite Loop')",
+    "VulnID": "CWE-835",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 79,
+    "EndLine": 82,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

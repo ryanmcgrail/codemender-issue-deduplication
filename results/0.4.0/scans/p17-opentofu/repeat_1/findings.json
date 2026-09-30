@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "7e7a2550-8be9-5421-b01f-71a9202cfd70",
+    "SessionID": "ChAzNWFkYzYwNWJjNzBhZTRmEAgaATAqBG1haW4",
+    "Title": "SSH host key verification disabled by default (InsecureIgnoreHostKey)",
+    "FilePath": "internal/communicator/ssh/provisioner.go",
+    "Severity": "MEDIUM",
+    "Confidence": 80,
+    "Analysis": "In OpenTofu, when configuring an SSH connection for remote provisioning (e.g. `remote-exec`), if the user does not specify a `host_key`, the SSH communicator defaults to ignoring host key verification. \n\nSpecifically, in `internal/communicator/ssh/provisioner.go`:\n```go\nfunc buildSSHClientConfig(opts sshClientConfigOpts) (*ssh.ClientConfig, error) {\n\thkCallback := ssh.InsecureIgnoreHostKey()\n\n\tif opts.hostKey != \"\" {\n        ...\n\t\thkCallback, err = knownhosts.New(tf.Name())\n        ...\n\t}\n\n\tconf := \u0026ssh.ClientConfig{\n\t\tHostKeyCallback: hkCallback,\n\t\tUser:            opts.user,\n\t}\n```\nIf `opts.hostKey` is empty, `hkCallback` remains `ssh.InsecureIgnoreHostKey()`. This exposes the SSH connection to potential Man-in-the-Middle (MitM) attacks, allowing an attacker to intercept or modify communication/commands sent to the remote host. OpenTofu should enforce host key verification by default or at least warn the user, rather than silently disabling it completely.\n\n**Conceptual Exploit Payload:**\nAn attacker positioned on the same network or with ARP spoofing capabilities intercepts the SSH connection from the machine running OpenTofu to the target server during the apply phase. Since OpenTofu uses `ssh.InsecureIgnoreHostKey()`, it will authenticate against the attacker's server without warning, allowing the attacker to capture SSH credentials or execute arbitrary code on the runner/provisioner by redirecting the session.",
+    "Snippet": "func buildSSHClientConfig(opts sshClientConfigOpts) (*ssh.ClientConfig, error) {\n\thkCallback := ssh.InsecureIgnoreHostKey()\n\n\tif opts.hostKey != \"\" {\n\t\t// The knownhosts package only takes paths to files, but tofu\n\t\t// generally wants to handle config data in-memory. Rather than making\n\t\t// the known_hosts file an exception, write out the data to a temporary\n\t\t// file to create the HostKeyCallback.\n\t\ttf, err := os.CreateTemp(\"\", \"tf-known_hosts\")\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to create temp known_hosts file: %w\", err)\n\t\t}\n\t\tdefer tf.Close()\n\t\tdefer os.RemoveAll(tf.Name())\n\n\t\t// we mark this as a CA as well, but the host key fallback will still\n\t\t// use it as a direct match if the remote host doesn't return a\n\t\t// certificate.\n\t\tif _, err := tf.WriteString(fmt.Sprintf(\"@cert-authority %s %s\\n\", opts.host, opts.hostKey)); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to write temp known_hosts file: %w\", err)\n\t\t}\n\t\ttf.Sync()\n\n\t\thkCallback, err = knownhosts.New(tf.Name())\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\n\tconf := \u0026ssh.ClientConfig{\n\t\tHostKeyCallback: hkCallback,\n\t\tUser:            opts.user,\n\t}",
+    "VulnType": "Web Security",
+    "VulnID": "CWE-295",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 330,
+    "EndLine": 362,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

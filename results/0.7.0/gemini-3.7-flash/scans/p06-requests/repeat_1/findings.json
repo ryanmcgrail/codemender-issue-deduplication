@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "c3ee1b7d",
+    "severity": "HIGH",
+    "vuln_type": "CWE-377: Insecure Temporary File",
+    "file_path": "src/requests/utils.py",
+    "title": "Insecure Temporary File Handling in extract_zipped_paths Allows Local CA Bundle Hijacking",
+    "confidence": 90,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Insecure Temporary File Handling in extract_zipped_paths Allows Local CA Bundle Hijacking",
+    "snippet": ""
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "51f72137",
+    "severity": "HIGH",
+    "type": "Command Injection",
+    "file": "pkg/kubelet/kubelet_server_journal.go",
+    "title": "Command Injection in NodeLogQuery via Unsanitized Pattern on Windows Nodes",
+    "confidence": 95
+  },
+  {
+    "id": "e0e6243f",
+    "severity": "HIGH",
+    "type": "Path Traversal",
+    "file": "pkg/volume/hostpath/host_path.go",
+    "title": "Path Traversal in hostPath Deleter Allows Arbitrary Host Directory Deletion via Unanchored Regex and Lack of Path Sanitization",
+    "confidence": 100
+  },
+  {
+    "id": "66e6b5b2",
+    "severity": "MEDIUM",
+    "type": "Path Traversal",
+    "file": "pkg/volume/util/subpath/subpath_linux.go",
+    "title": "Absolute path passed to syscall.Mkdirat bypasses directory containment in doSafeMakeDir",
+    "confidence": 85
+  },
+  {
+    "id": "6112dd51",
+    "severity": "HIGH",
+    "type": "Server-Side Request Forgery (SSRF)",
+    "file": "test/images/agnhost/no-snat-test-proxy/main.go",
+    "title": "Server-Side Request Forgery (SSRF) in no-snat-test-proxy checknosnat endpoint",
+    "confidence": 95
+  },
+  {
+    "id": "a74f4455",
+    "severity": "HIGH",
+    "type": "Server-Side Request Forgery (SSRF)",
+    "file": "test/images/agnhost/no-snat-test/main.go",
+    "title": "Server-Side Request Forgery (SSRF) in no-snat-test checknosnat endpoint",
+    "confidence": 95
+  }
+]

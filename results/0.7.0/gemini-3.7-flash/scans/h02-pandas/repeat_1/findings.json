@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "2ccb94a4",
+    "severity": "HIGH",
+    "vuln_type": "CWE-611: Improper Restriction of XML External Entity Reference",
+    "file_path": "pandas/io/xml.py",
+    "title": "XML External Entity (XXE) Injection in pandas.read_xml via lxml parser",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "XML External Entity (XXE) Injection in pandas.read_xml via lxml parser",
+    "snippet": ""
+  }
+]

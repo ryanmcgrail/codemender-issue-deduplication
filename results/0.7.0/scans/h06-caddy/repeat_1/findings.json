@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "12f0c4d1-c00a-51ea-9624-0cbeaeff3d4e",
+    "session_id": "ChBhNWQzMWViZmVhNjI3NmU3EAgaATAqBG1haW4",
+    "title": "Case-Sensitive WebSocket Upgrade Check Bypass in Admin API",
+    "file_path": "/home/jfplante_google_com/repos/h06-caddy_rep1/admin.go",
+    "severity": "HIGH",
+    "confidence": 85,
+    "analysis": "The administrative API performs a check to block browser-initiated WebSocket connections because WebSockets are not protected by typical Same-Origin Policy (SOP) / CORS restrictions. However, the check `strings.Contains(r.Header.Get(\"Upgrade\"), \"websocket\")` is case-sensitive. Since HTTP `Upgrade` header values are case-insensitive, an attacker or browser can send `Upgrade: WebSocket` or `Upgrade: WEBSOCKET`, which bypasses this check. If `enforceOrigin` is not configured, this bypass can expose the admin API to Cross-Site WebSocket Hijacking (CSWSH) and unauthorized request execution.\n\nConceptual Exploit Payload:\n```http\nGET /config/ HTTP/1.1\nHost: localhost:2019\nUpgrade: WebSocket\nConnection: Upgrade\nOrigin: http://attacker.com\nSec-WebSocket-Version: 13\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n```\n\nThis request bypasses the WebSocket upgrade check because 'WebSocket' does not contain 'websocket' (case-sensitively), letting the request reach the admin router.",
+    "snippet": "\tif strings.Contains(r.Header.Get(\"Upgrade\"), \"websocket\") {\n\t\t// I've never been able demonstrate a vulnerability myself, but apparently\n\t\t// WebSocket connections originating from browsers aren't subject to CORS\n\t\t// restrictions, so we'll just be on the safe side\n\t\th.handleError(w, r, fmt.Errorf(\"websocket connections aren't allowed\"))\n\t\treturn\n\t}",
+    "vuln_type": "CWE-178: Improper Handling of Case Sensitivity",
+    "vuln_id": "CWE-178",
+    "status": "OPEN",
+    "start_line": 803,
+    "end_line": 809
+  }
+]

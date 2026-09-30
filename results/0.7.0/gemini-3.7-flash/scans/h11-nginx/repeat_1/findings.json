@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "b3feef95",
+    "severity": "HIGH",
+    "vuln_type": "Integer Underflow (Wrap or Overflow)",
+    "file_path": "src/http/modules/ngx_http_mp4_module.c",
+    "title": "Integer Underflow in ngx_http_mp4_crop_stsc_data in MP4 Module (CVE-2024-7347)",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Integer Underflow in ngx_http_mp4_crop_stsc_data in MP4 Module (CVE-2024-7347)",
+    "snippet": ""
+  }
+]

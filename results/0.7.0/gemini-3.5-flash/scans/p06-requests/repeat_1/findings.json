@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "091890c3-2f34-5500-9f4c-5a9d35953623",
+    "session_id": "ChAzZDg4NWM3ZTUxOGE0OWIzEAgaATAqBG1haW4",
+    "title": "Naive suffix match in NO_PROXY/no_proxy configuration allows proxy bypass",
+    "file_path": "/home/jfplante_google_com/repos/p06-requests_rep1/src/requests/utils.py",
+    "severity": "MEDIUM",
+    "confidence": 90,
+    "analysis": "### Source\nThe target URL of the request, which could be sourced from untrusted user input or environment-specific configurations.\n\n### Sanitization/Validation\nThe `should_bypass_proxies` function attempts to validate whether the requested hostname matches any entries in the `no_proxy` configuration. However, it uses a naive suffix-based comparison (`parsed.hostname.endswith(host)`) without checking if the match occurs at a domain boundary (i.e., exact match or preceded by a `.` character).\n\n### Sink\nThe function returns `True` for `should_bypass_proxies`, leading to the request completely bypassing the configured proxy and connecting directly to the destination server.\n\n### Conceptual Exploit Payload\n1. A corporate environment sets up an egress proxy to monitor and filter all external requests, except for the internal domain `trustedcompany.com`:\n   `NO_PROXY=\"trustedcompany.com\"`\n2. An attacker wants to bypass this egress proxy. Knowing that the proxy is bypassed for any domain ending with `trustedcompany.com`, the attacker registers:\n   `attacker-trustedcompany.com`\n3. If an internal service uses Python's `requests` library to connect to the attacker's URL (e.g., via a webhook, RSS feed reader, or user-supplied link), the library will evaluate:\n   `\"attacker-trustedcompany.com\".endswith(\"trustedcompany.com\")` -\u003e `True`\n4. The request will bypass the proxy and establish a direct connection to `attacker-trustedcompany.com`, completely bypassing the network's egress security policies.",
+    "snippet": "            for host in no_proxy:\n                if parsed.hostname.endswith(host) or host_with_port.endswith(host):\n                    # The URL does match something in no_proxy, so we don't want\n                    # to apply the proxies on this URL.\n                    return True",
+    "vuln_type": "Improper Input Validation",
+    "vuln_id": "CWE-20",
+    "status": "OPEN",
+    "start_line": 807,
+    "end_line": 811
+  }
+]

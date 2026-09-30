@@ -1,0 +1,62 @@
+[
+  {
+    "finding_id": "ba626ee3-2565-54cb-bdaa-99a204ac533c",
+    "session_id": "ChAzOTZlOTEzOGEyN2UzOTNkEAgaATAqBG1haW4",
+    "title": "Insecure Deserialization in ServerLogCommand Leading to Remote Code Execution",
+    "file_path": "/home/jfplante_google_com/repos/p38-symfony_rep1/src/Symfony/Bridge/Monolog/Command/ServerLogCommand.php",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "Data Flow:\n- Source: In `ServerLogCommand::execute()`, a TCP server is instantiated via `stream_socket_server($host, ...)` which listens by default on `0.0.0.0:9911`. In `getLogs($socket)`, lines from connected TCP clients are read via `fgets($stream)`.\n- Sanitization/Validation: None. The raw line is only passed to `base64_decode($message)`. No class allowlist (`allowed_classes`) or cryptographic signature/HMAC verification is used before deserialization.\n- Sink: PHP native `unserialize()` function at line 109.\n\nImpact:\nAn unauthenticated network attacker who can reach port 9911 can transmit a base64-encoded serialized PHP gadget chain object. When deserialized, magic methods (such as `__destruct` or `__wakeup`) are invoked, leading to remote code execution (RCE).\n\nConceptual Exploit Payload:\nConnect to the log server over TCP (e.g., using `nc target-ip 9911`) and send a base64-encoded serialized gadget payload followed by a newline:\n```\nTzozMToiU29tZVxWdWxuZXJhYmxlXEdhZGdldFxDbGFzcyI6MTp7czo3OiJjb21tYW5kIjtzOjExOiJpZCA+IC90bXAvcCI7fQ==\n```\nUpon reading this line, `ServerLogCommand` executes:\n`$record = unserialize(base64_decode(\"TzozMToiU29tZVxWdWxuZXJhYmxlXEdhZGdldFxDbGFzcyI6MTp7czo3OiJjb21tYW5kIjtzOjExOiJpZCA+IC90bXAvcCI7fQ==\"));`\ntriggering the gadget chain destructor and executing arbitrary code.",
+    "snippet": "        foreach ($this-\u003egetLogs($socket) as $clientId =\u003e $message) {\n            $record = unserialize(base64_decode($message));",
+    "vuln_type": "CWE-502: Deserialization of Untrusted Data",
+    "vuln_id": "CWE-502",
+    "status": "OPEN",
+    "start_line": 108,
+    "end_line": 109
+  },
+  {
+    "finding_id": "f20bd008-c881-5f5f-95e9-71517d41f7b1",
+    "session_id": "ChAyNGZkMjdhNjdhMjQxOTYyEAgaATAqBG1haW4",
+    "title": "Use of Weak Cryptographic Hash (MD5) for Long Passwords in CRAM-MD5 Authentication",
+    "file_path": "/home/jfplante_google_com/repos/p38-symfony_rep1/src/Symfony/Component/Mailer/Transport/Smtp/Auth/CramMd5Authenticator.php",
+    "severity": "MEDIUM",
+    "confidence": 85,
+    "analysis": "**Source**: The authentication secret/password passed to `CramMd5Authenticator::getResponse()` from `$client-\u003egetPassword()` when performing SMTP CRAM-MD5 authentication.\n**Sanitization/Validation**: The method checks if the secret is non-empty (`if (!$secret)`), but performs no cryptographic protection against weak hashing algorithms.\n**Sink**: Call to `md5($secret)` at line 50.\n**Analysis**: The MD5 algorithm is cryptographically weak, broken, and susceptible to collision and preimage attacks. In RFC 6331, CRAM-MD5 was formally moved to Historic status due to MD5 weaknesses. When passwords longer than 64 characters are hashed with MD5, the resulting key material relies on a broken hash function in an authentication context, violating CWE-327.\n**Conceptual Exploit Payload**:\nA malicious or compromised SMTP server sends an authentication challenge `AUTH CRAM-MD5`. When the client connects with a secret of length \u003e 64 bytes (e.g. `secret = \"A\" * 65`), `md5($secret)` is computed to truncate the secret before computing the response digest, which an attacker capturing the authentication exchange can target with offline brute-force or collision-based attacks.",
+    "snippet": "$secret = pack('H32', md5($secret));",
+    "vuln_type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+    "vuln_id": "CWE-327",
+    "status": "OPEN",
+    "start_line": 50,
+    "end_line": 50
+  },
+  {
+    "finding_id": "8182e872-c0b5-5ac5-b257-dba3aeaf41da",
+    "session_id": "ChAyNGZkMjdhNjdhMjQxOTYyEAgaATAqBG1haW4",
+    "title": "Use of Weak Cryptographic Hash (MD5) in CRAM-MD5 Inner Hash Calculation",
+    "file_path": "/home/jfplante_google_com/repos/p38-symfony_rep1/src/Symfony/Component/Mailer/Transport/Smtp/Auth/CramMd5Authenticator.php",
+    "severity": "MEDIUM",
+    "confidence": 85,
+    "analysis": "**Source**: The challenge string received from the SMTP server (`AUTH CRAM-MD5\\r\\n` response) combined with the inner padded secret (`$kipad`).\n**Sanitization/Validation**: The challenge is base64-decoded directly from server output (`base64_decode(substr($challenge, 4))`) without cryptographic validation or negotiation of stronger hashing algorithms.\n**Sink**: Call to `md5($kipad.$challenge)` at line 60.\n**Analysis**: The MD5 algorithm is cryptographically weak, broken, and susceptible to collision and preimage attacks. The use of MD5 in challenge-response authentication (RFC 2195 / RFC 4954) was deprecated and moved to Historic status in RFC 6331 because of its susceptibility to offline dictionary, collision, and rainbow table attacks. Computing the inner HMAC hash using MD5 in an authentication context violates CWE-327.\n**Conceptual Exploit Payload**:\nA malicious or rogue SMTP server presents `AUTH CRAM-MD5` capability and sends a chosen challenge string:\n`334 PDEyMzQ1LjY3ODkwQGF0dGFja2VyLmNvbT4=`\nThe client computes `md5($kipad . \"\u003c12345.67890@attacker.com\u003e\")` and responds with the resulting digest. An attacker eavesdropping or posing as the rogue server captures the response and performs an offline GPU dictionary attack to crack the user's password.",
+    "snippet": "$inner = pack('H32', md5($kipad.$challenge));",
+    "vuln_type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+    "vuln_id": "CWE-327",
+    "status": "OPEN",
+    "start_line": 60,
+    "end_line": 60
+  },
+  {
+    "finding_id": "6e91f462-8ee2-5fe9-a5be-4cab03fa22b1",
+    "session_id": "ChAyNGZkMjdhNjdhMjQxOTYyEAgaATAqBG1haW4",
+    "title": "Use of Weak Cryptographic Hash (MD5) in CRAM-MD5 Final Authentication Digest",
+    "file_path": "/home/jfplante_google_com/repos/p38-symfony_rep1/src/Symfony/Component/Mailer/Transport/Smtp/Auth/CramMd5Authenticator.php",
+    "severity": "MEDIUM",
+    "confidence": 85,
+    "analysis": "**Source**: The outer padded secret (`$kopad`) concatenated with the binary-packed inner MD5 result (`$inner`).\n**Sanitization/Validation**: None. The HMAC-MD5 calculation directly computes the outer digest using `md5(...)`.\n**Sink**: Call to `md5($kopad.$inner)` at line 61.\n**Analysis**: The MD5 algorithm is cryptographically weak, broken, and susceptible to collisions. The resulting digest is sent across the network as the client's authentication credential (`sprintf(\"%s\\r\\n\", $message)`). Using MD5 to produce the final authentication token transmitted to the SMTP server exposes credentials to offline cracking and violates CWE-327.\n**Conceptual Exploit Payload**:\nDuring SMTP connection establishment, the SMTP server advertises CRAM-MD5 support. The client computes:\n`$digest = md5($kopad . $inner);`\nand sends:\n`base64_encode($username . ' ' . $digest)`\nAn attacker monitoring the network or controlling the SMTP server intercepts the digest and conducts fast offline dictionary attacks using hashcat/JohnTheRipper against the MD5 HMAC to recover the plaintext password.",
+    "snippet": "$digest = md5($kopad.$inner);",
+    "vuln_type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+    "vuln_id": "CWE-327",
+    "status": "OPEN",
+    "start_line": 61,
+    "end_line": 61
+  }
+]

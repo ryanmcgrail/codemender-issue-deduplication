@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "a326a944",
+    "severity": "CRITICAL",
+    "vuln_type": "Code Injection",
+    "file_path": "pkg/expr/sql_command.go",
+    "title": "Arbitrary DuckDB SQL Execution Leading to Local File Read and Remote Code Execution (CVE-2024-9264)",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Arbitrary DuckDB SQL Execution Leading to Local File Read and Remote Code Execution (CVE-2024-9264)",
+    "snippet": ""
+  }
+]

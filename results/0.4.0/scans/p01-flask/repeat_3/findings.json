@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "db9664da-e609-5cd0-816a-6df89170b838",
+    "SessionID": "ChBhZTUzYzExYmNhYzc1OWZiEAgaATAqBG1haW4",
+    "Title": "Missing CSRF Protection in Flaskr Tutorial Example Application",
+    "FilePath": "/home/jfplante_google_com/repos/p01-flask_rep3/examples/tutorial/flaskr/blog.py",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The Flaskr tutorial application inside the repository (`examples/tutorial/flaskr/blog.py`) allows users to manage blog posts through state-changing actions via the `/create`, `/\u003cint:id\u003e/update`, and `/\u003cint:id\u003e/delete` routes. Since Flask does not include CSRF protection out of the box, and no CSRF tokens or origin checks are validated on the backend/rendered in the forms, these endpoints are vulnerable to Cross-Site Request Forgery (CSRF). An external attacker can craft an exploit page containing a hidden form that targets one of these endpoints (e.g. `/\u003cint:id\u003e/delete` or `/\u003cint:id\u003e/update`) and auto-submits it. When an authenticated user visits the attacker's page, their browser automatically includes the session cookie, executing the action on their behalf.\n\n### Conceptual Exploit Payload\nAn attacker hosts a malicious HTML page with the following payload:\n```html\n\u003cbody onload=\"document.forms[0].submit()\"\u003e\n  \u003cform action=\"http://localhost:5000/1/delete\" method=\"POST\"\u003e\n    \u003cinput type=\"submit\" value=\"Delete Post\"\u003e\n  \u003c/form\u003e\n\u003c/body\u003e\n```\nWhen an authenticated user (who is the author of post ID 1) visits this page, a POST request is automatically sent to the `/1/delete` endpoint. Since the browser includes the session cookie, Flaskr will delete the post with ID `1` on behalf of the victim.",
+    "Snippet": "@bp.route(\"/create\", methods=(\"GET\", \"POST\"))\n@login_required\ndef create():\n    \"\"\"Create a new post for the current user.\"\"\"\n    if request.method == \"POST\":\n        title = request.form[\"title\"]\n        body = request.form[\"body\"]\n        error = None\n\n        if not title:\n            error = \"Title is required.\"\n\n        if error is not None:\n            flash(error)\n        else:\n            db = get_db()\n            db.execute(\n                \"INSERT INTO post (title, body, author_id) VALUES (?, ?, ?)\",\n                (title, body, g.user[\"id\"]),\n            )\n            db.commit()\n            return redirect(url_for(\"blog.index\"))\n\n    return render_template(\"blog/create.html\")\n\n\n@bp.route(\"/\u003cint:id\u003e/update\", methods=(\"GET\", \"POST\"))\n@login_required\ndef update(id):\n    \"\"\"Update a post if the current user is the author.\"\"\"\n    post = get_post(id)\n\n    if request.method == \"POST\":\n        title = request.form[\"title\"]\n        body = request.form[\"body\"]\n        error = None\n\n        if not title:\n            error = \"Title is required.\"\n\n        if error is not None:\n            flash(error)\n        else:\n            db = get_db()\n            db.execute(\n                \"UPDATE post SET title = ?, body = ? WHERE id = ?\", (title, body, id)\n            )\n            db.commit()\n            return redirect(url_for(\"blog.index\"))\n\n    return render_template(\"blog/update.html\", post=post)\n\n\n@bp.route(\"/\u003cint:id\u003e/delete\", methods=(\"POST\",))\n@login_required\ndef delete(id):\n    \"\"\"Delete a post.\n\n    Ensures that the post exists and that the logged in user is the\n    author of the post.\n    \"\"\"\n    get_post(id)\n    db = get_db()\n    db.execute(\"DELETE FROM post WHERE id = ?\", (id,))\n    db.commit()\n    return redirect(url_for(\"blog.index\"))",
+    "VulnType": "Cross-Site Request Forgery (CSRF)",
+    "VulnID": "CWE-352",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 60,
+    "EndLine": 125,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

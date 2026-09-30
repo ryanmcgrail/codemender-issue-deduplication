@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "8adcea6e-7384-5e9e-b2cb-fa2ea79a8612",
+    "SessionID": "ChBkMjAzZTNmODM3YzI2MTMyEAgaATAqBG1haW4",
+    "Title": "DoH HTTPS RR parsing heap out-of-bounds read",
+    "FilePath": "/home/jfplante_google_com/repos/p31-curl_rep3/lib/doh.c",
+    "Severity": "HIGH",
+    "Confidence": 100,
+    "Analysis": "The vulnerability resides in the function `Curl_doh_decode_httpsrr` in `lib/doh.c`.\n\n### Data Flow Trace\n- **Source**: Untrusted DoH response payload containing HTTPS Resource Records (RR), stored in `de.https_rrs-\u003eval` with length `de.https_rrs-\u003elen`.\n- **Sanitization/Validation**: In `Curl_doh_decode_httpsrr`, the code reads a 2-byte parameter length `plen` from the untrusted payload (lines 1202-1203). It checks whether `plen \u003c= remaining` (line 1229) and updates pointers *only after* processing the parameter. No validation of `plen` is performed prior to processing.\n- **Sink**: `Curl_memdup(cp, plen)` (lines 1212, 1218, 1224) or `local_decode_rdata_alpn(cp, plen, ...)` (line 1206). Both sinks read up to `plen` bytes starting at `cp`. Since `plen` can be greater than `remaining` (the actual remaining buffer size), these functions will read past the end of the heap-allocated buffer.\n\n### Conceptual Exploit Payload\nA malicious DoH resolver returns an HTTPS RR response containing:\n1. 2 bytes priority: `\\x00\\x01`\n2. 1 byte target name length: `\\x00` (root `.`)\n3. 2 bytes parameter code (pcode): `\\x00\\x04` (HTTPS_RR_CODE_IPV4)\n4. 2 bytes parameter length (plen): `\\xff\\xff` (65535)\n5. 0 bytes of value data (the DNS response ends here)\n\nWhen processed, `remaining` is small (e.g., 0). Since `pcode == HTTPS_RR_CODE_IPV4`, Curl calls `Curl_memdup(cp, 65535)`. This results in `memcpy` attempting to copy 65535 bytes from the heap buffer `cp`, causing a heap out-of-bounds read and potential crash or information leakage.",
+    "Snippet": "  while(remaining \u003e= 4) {\n    pcode = (uint16_t)((*cp \u003c\u003c 8) + (*(cp + 1)));\n    cp += 2;\n    plen = (uint16_t)((*cp \u003c\u003c 8) + (*(cp + 1)));\n    cp += 2;\n    remaining -= 4;\n    if(pcode == HTTPS_RR_CODE_ALPN) {\n      if(local_decode_rdata_alpn(cp, plen, \u0026lhrr-\u003ealpns) != CURLE_OK)\n        goto err;\n    }\n    if(pcode == HTTPS_RR_CODE_NO_DEF_ALPN)\n      lhrr-\u003eno_def_alpn = TRUE;\n    else if(pcode == HTTPS_RR_CODE_IPV4) {\n      lhrr-\u003eipv4hints = Curl_memdup(cp, plen);\n      if(!lhrr-\u003eipv4hints)\n        goto err;\n      lhrr-\u003eipv4hints_len = (size_t)plen;\n    }\n    else if(pcode == HTTPS_RR_CODE_ECH) {\n      lhrr-\u003eechconfiglist = Curl_memdup(cp, plen);\n      if(!lhrr-\u003eechconfiglist)\n        goto err;\n      lhrr-\u003eechconfiglist_len = (size_t)plen;\n    }\n    else if(pcode == HTTPS_RR_CODE_IPV6) {\n      lhrr-\u003eipv6hints = Curl_memdup(cp, plen);\n      if(!lhrr-\u003eipv6hints)\n        goto err;\n      lhrr-\u003eipv6hints_len = (size_t)plen;\n    }\n    if(plen \u003e 0 \u0026\u0026 plen \u003c= remaining) {\n      cp += plen;\n      remaining -= plen;\n    }\n  }",
+    "VulnType": "CWE-125",
+    "VulnID": "CWE-125",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 1199,
+    "EndLine": 1233,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

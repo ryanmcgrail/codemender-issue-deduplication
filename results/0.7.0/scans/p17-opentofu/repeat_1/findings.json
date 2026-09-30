@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "254df9e1-e9ca-5bc4-9306-3191a7a21a96",
+    "session_id": "ChAyZDk0NDFlM2E3NDA0YmVlEAgaATAqBG1haW4",
+    "title": "Windows Path Traversal via Backslashes in Module Source Subdirectory",
+    "file_path": "/home/jfplante_google_com/repos/p17-opentofu_rep1/internal/addrs/module_source.go",
+    "severity": "HIGH",
+    "confidence": 100,
+    "analysis": "### Source\nUntrusted input enters the program from the `source` attribute of a `module` block in a `.tf` configuration file, or from the download URL returned by a remote module registry.\n\n### Sanitization/Validation Bypass\nThe validation function `parseModuleSourceRemote` in `internal/addrs/module_source.go` attempts to prevent directory traversal by calling `getmodules.SplitPackageSubdir(raw)` and checking if the resulting `subDir` starts with `../`:\n```go\nraw, subDir = getmodules.SplitPackageSubdir(raw)\nif strings.HasPrefix(subDir, \"../\") {\n    return ModuleSourceRemote{}, fmt.Errorf(\"subdirectory path %q leads outside of the module package\", subDir)\n}\n```\nAnd `getmodules.SplitPackageSubdir` cleans the path using the standard Go `path.Clean` function:\n```go\nif subDir != \"\" {\n    subDir = path.Clean(subDir)\n}\n```\nBecause `path.Clean` and `strings.HasPrefix(..., \"../\")` are hardcoded to handle only forward slashes (`/`), they fail to recognize backslashes (`\\`) on Windows. An input subdirectory like `..\\..\\..\\..\\..\\Windows\\System32` is not modified by `path.Clean`, and does not trigger the `strings.HasPrefix(subDir, \"../\")` check.\n\n### Sink\nDuring module installation (in `internal/initwd/module_install.go`), the final path is resolved using `filepath.Join`:\n```go\nsubDir := filepath.FromSlash(finalAddr.Subdir)\nmodDir := filepath.Join(instPath, subDir)\n```\nOn Windows, `filepath.Join` evaluates backslashes as valid directory separators and cleans the path, resulting in `modDir` traversing out of the downloaded module cache directory `instPath`.\nSubsequently, OpenTofu loads configuration files from this arbitrary directory via:\n```go\nmod, mDiags := i.loader.Parser().LoadConfigDir(modDir)\n```\nThis enables an attacker to load and execute arbitrary local configuration files or extract local files/secrets from the runner system.\n\n### Conceptual Exploit Payload\nTo trigger this vulnerability on Windows, define a module with backslashes in the subdirectory portion:\n```hcl\nmodule \"exploit\" {\n  source = \"git::https://github.com/opentofu/opentofu.git//..\\\\..\\\\..\\\\..\\\\..\\\\Windows\\\\System32\"\n}\n```\nOr set up a malicious private registry that returns a location with backslashes in the subdirectory field:\n```json\n{\n  \"location\": \"git::https://github.com/opentofu/opentofu.git//..\\\\..\\\\..\\\\..\\\\..\\\\Windows\\\\System32\"\n}\n```",
+    "snippet": "func parseModuleSourceRemote(raw string) (ModuleSourceRemote, error) {\n\tvar subDir string\n\traw, subDir = getmodules.SplitPackageSubdir(raw)\n\tif strings.HasPrefix(subDir, \"../\") {\n\t\treturn ModuleSourceRemote{}, fmt.Errorf(\"subdirectory path %q leads outside of the module package\", subDir)\n\t}",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 271,
+    "end_line": 276
+  }
+]

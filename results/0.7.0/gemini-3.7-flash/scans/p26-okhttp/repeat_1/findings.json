@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "cde6448e",
+    "severity": "MEDIUM",
+    "vuln_type": "Improper Check for Unusual or Exceptional Conditions",
+    "file_path": "okhttp-urlconnection/src/main/kotlin/okhttp3/JavaNetCookieJar.kt",
+    "title": "StringIndexOutOfBoundsException in JavaNetCookieJar when parsing single double-quote cookie value",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "StringIndexOutOfBoundsException in JavaNetCookieJar when parsing single double-quote cookie value",
+    "snippet": ""
+  },
+  {
+    "finding_id": "6848cf5e",
+    "severity": "HIGH",
+    "vuln_type": "Reliance on Reverse DNS Resolution for a Security Decision",
+    "file_path": "okhttp-tls/src/main/kotlin/okhttp3/tls/internal/InsecureExtendedTrustManager.kt",
+    "title": "Reliance on Reverse DNS Resolution in InsecureExtendedTrustManager Allows Certificate Validation Bypass",
+    "confidence": 90,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Reliance on Reverse DNS Resolution in InsecureExtendedTrustManager Allows Certificate Validation Bypass",
+    "snippet": ""
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "finding_id": "4e243bdf",
+    "severity": "HIGH",
+    "vuln_type": "SQL Injection",
+    "file_path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/sql/Function.kt",
+    "title": "SQL Injection via unescaped string interpolation in Locate function",
+    "confidence": 95,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "SQL Injection via unescaped string interpolation in Locate function",
+    "snippet": ""
+  },
+  {
+    "finding_id": "775861f9",
+    "severity": "MEDIUM",
+    "vuln_type": "Use of a Broken or Risky Cryptographic Algorithm",
+    "file_path": "exposed-crypt/src/main/kotlin/org/jetbrains/exposed/crypt/Algorithms.kt",
+    "title": "Insecure Cryptographic ECB Mode in Algorithms.BLOW_FISH",
+    "confidence": 90,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "Insecure Cryptographic ECB Mode in Algorithms.BLOW_FISH",
+    "snippet": ""
+  }
+]

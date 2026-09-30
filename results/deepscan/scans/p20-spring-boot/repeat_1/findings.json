@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "206f3a45-a186-5c58-9bab-38047d434d71",
+    "session_id": "ChAxZDNkMTkyYmM0YjdkZDk5EAgaATAqBG1haW4",
+    "title": "Insecure Deserialization in HttpRestartServer",
+    "file_path": "/home/jfplante_google_com/repos/p20-spring-boot_rep1/spring-boot-project/spring-boot-devtools/src/main/java/org/springframework/boot/devtools/restart/server/HttpRestartServer.java",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "In `HttpRestartServer.handle(ServerHttpRequest, ServerHttpResponse)`, the server processes HTTP requests destined for the remote restart endpoint. The method directly creates a `java.io.ObjectInputStream` over `request.getBody()` without configuring any deserialization filtering (such as an `ObjectInputFilter` allowlist). When `(ClassLoaderFiles) objectInputStream.readObject()` is executed, arbitrary Java objects sent in the HTTP request body are deserialized. \n\nIf gadget classes (such as those in common third-party libraries or the Spring framework itself) are present on the classpath, an attacker can supply a malicious serialized object payload to achieve Remote Code Execution (RCE) prior to the class cast to `ClassLoaderFiles`.\n\nData Path:\n- Source: `ServerHttpRequest request.getBody()` (untrusted HTTP request body).\n- Sanitization/Validation: None. No `ObjectInputFilter` or type validation is applied to the incoming stream.\n- Sink: `objectInputStream.readObject()` at line 74.\n\nConceptual Exploit Payload:\nGenerate a gadget chain payload using a tool like ysoserial (e.g. CommonsCollections or Spring gadget payload) and send it as the HTTP POST body to the remote restart endpoint:\n```http\nPOST /.~~spring-boot!~/restart HTTP/1.1\nHost: target-app:8080\nX-AUTH-TOKEN: \u003cdevtools-secret\u003e\nContent-Length: 1337\nContent-Type: application/octet-stream\n\n\u003craw bytes of serialized Java gadget payload executing e.g. calc.exe or touch /tmp/pwned\u003e\n```",
+    "snippet": "\t\t\tObjectInputStream objectInputStream = new ObjectInputStream(request.getBody());\n\t\t\tClassLoaderFiles files = (ClassLoaderFiles) objectInputStream.readObject();\n\t\t\tobjectInputStream.close();",
+    "vuln_type": "Insecure Deserialization",
+    "vuln_id": "CWE-502",
+    "status": "OPEN",
+    "start_line": 73,
+    "end_line": 75
+  }
+]

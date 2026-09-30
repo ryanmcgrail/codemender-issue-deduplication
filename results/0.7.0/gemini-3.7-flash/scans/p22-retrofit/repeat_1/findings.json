@@ -1,0 +1,14 @@
+[
+  {
+    "finding_id": "c6331557",
+    "severity": "HIGH",
+    "vuln_type": "Improper Restriction of XML External Entity Reference",
+    "file_path": "retrofit-converters/simplexml/src/main/java/retrofit2/converter/simplexml/SimpleXmlResponseBodyConverter.java",
+    "title": "XML External Entity (XXE) Injection in SimpleXmlResponseBodyConverter",
+    "confidence": 100,
+    "status": "OPEN",
+    "source_stage": "find",
+    "analysis": "XML External Entity (XXE) Injection in SimpleXmlResponseBodyConverter",
+    "snippet": ""
+  }
+]

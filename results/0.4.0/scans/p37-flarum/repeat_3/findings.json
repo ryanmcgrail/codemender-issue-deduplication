@@ -1,0 +1,23 @@
+[
+  {
+    "FindingID": "fdc34bbc-8d0c-5cf4-a1ff-bbe88cd3bb92",
+    "SessionID": "ChA4M2VjMGRkYzQxNDY4ODE0EAgaATAqBG1haW4",
+    "Title": "Open Redirect Vulnerability in LogOutController",
+    "FilePath": "framework/core/src/Forum/Controller/LogOutController.php",
+    "Severity": "MEDIUM",
+    "Confidence": 75,
+    "Analysis": "The logout controller validates the `return` query parameter using `sanitizeReturnUrl()`. This method parses the return URL via `Laminas\\\\Diactoros\\\\Uri` and checks if the host is in the list of allowed domains (`getAllowedRedirectDomains()`). However, if an attacker provides a return URL like `//attacker.com`, the Laminas URI parser might parse `attacker.com` as the path if parsed as a relative URL, or if it is treated as a scheme-less absolute URL, the host might end up being `attacker.com` while bypassing standard checks, or `sanitizeReturnUrl()` might return the parsed URI if its host matches, or if it fails to correctly restrict scheme-less URLs (e.g. `javascript:alert(1)` or scheme-less URLs).\n\nA conceptual exploit payload to trigger this open redirect is:\n`GET /logout?token=\u003cVALID_TOKEN\u003e\u0026return=//example.com:80@attacker.com` where `example.com` is the legitimate host and `attacker.com` is the attacker's malicious domain.\nAlternatively, utilizing backslashes in the return URL (e.g., `return=//example.com\\\\attacker.com`) may bypass host validation depending on browser-specific URL parsing behavior versus Diactoros's PSR-7 parsing.",
+    "Snippet": "    protected function sanitizeReturnUrl(string $url, string $base): Uri\n    {\n        if (empty($url)) {\n            return new Uri($base);\n        }\n\n        try {\n            $parsedUrl = new Uri($url);\n        } catch (\\InvalidArgumentException $e) {\n            return new Uri($base);\n        }\n\n        if (in_array($parsedUrl-\u003egetHost(), $this-\u003egetAllowedRedirectDomains())) {\n            return $parsedUrl;\n        }\n\n        return new Uri($base);\n    }",
+    "VulnType": "Open Redirect",
+    "VulnID": "CWE-601",
+    "Fingerprint": "",
+    "Status": "OPEN",
+    "SourceStage": "",
+    "FindingJSON": "",
+    "UpdatedAt": "",
+    "StartLine": 127,
+    "EndLine": 144,
+    "DismissReason": "",
+    "ConfidenceLevel": ""
+  }
+]

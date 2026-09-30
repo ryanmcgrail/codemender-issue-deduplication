@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "4ef87129-8f24-5407-a174-d6f4fb4ca60a",
+    "session_id": "ChBjMDg5ZjUwZDFlMTE4MDFiEAgaATAqBG1haW4",
+    "title": "Insecure Polymorphic Deserialization (RCE) via Default Typing and LaissezFaireSubTypeValidator",
+    "file_path": "/home/jfplante_google_com/repos/h07-jackson_rep1/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java",
+    "severity": "CRITICAL",
+    "confidence": 100,
+    "analysis": "### Data Flow Trace\n1. **Source**: Untrusted JSON data is passed by the client to `ObjectMapper.readValue(untrustedJsonInput, Object.class)`.\n2. **Sanitization/Validation**: The `ObjectMapper` instance is configured with default typing using the deprecated but retained `enableDefaultTyping()` method, which defaults to using `LaissezFaireSubTypeValidator` as its `PolymorphicTypeValidator`. `LaissezFaireSubTypeValidator` completely bypasses subtype validation by returning `Validity.ALLOWED` for all types. While `SubTypeValidator` is called as a fallback, it relies on a blocklist which can be bypassed using any unlisted gadget class.\n3. **Sink**: The deserializer factory (`BeanDeserializerFactory`) resolves the user-supplied class name and instantiates it, invoking constructors, setters, or getters that trigger remote code execution (RCE).\n\n### Conceptual Exploit Payload\nIf default typing is enabled on the `ObjectMapper` instance:\n```java\nObjectMapper mapper = new ObjectMapper();\nmapper.enableDefaultTyping();\n```\n\nAn attacker can provide a payload like the following (using a gadget class not in the blocklist, or a standard gadget if library dependencies are available) to execute arbitrary bytecode:\n```json\n[\n  \"com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl\",\n  {\n    \"transletBytecodes\": [ \"yv66vgAAADQA...\" ],\n    \"transletName\": \"Exploit\",\n    \"outputProperties\": {}\n  }\n]\n```\nWhen parsed with `mapper.readValue(payload, Object.class)`, this instantiates and executes code from the translet bytecode.",
+    "snippet": "    @Deprecated\n    public ObjectMapper enableDefaultTyping() {\n        return activateDefaultTyping(getPolymorphicTypeValidator());\n    }",
+    "vuln_type": "CWE-502",
+    "vuln_id": "CWE-502",
+    "status": "OPEN",
+    "start_line": 2105,
+    "end_line": 2107
+  }
+]

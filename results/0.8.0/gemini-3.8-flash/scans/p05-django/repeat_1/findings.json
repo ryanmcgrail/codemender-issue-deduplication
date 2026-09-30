@@ -1,0 +1,17 @@
+[
+  {
+    "finding_id": "2a42b413-bebf-5254-925d-53ebb14cf623",
+    "session_id": "ChAxNmQ5NmE2NjE0MzcwYjU3EAgaATAqBG1haW4",
+    "title": "Potential Directory Traversal and Arbitrary File Write in Storage.save()",
+    "file_path": "/home/jfplante_google_com/repos/p05-django_rep1/django/core/files/storage/base.py",
+    "severity": "HIGH",
+    "confidence": 95,
+    "analysis": "**Vulnerability Analysis**:\nIn Django's core file storage subsystem (`django.core.files.storage.base.Storage`), the `save()` method does not validate the target file path before passing it to the underlying storage implementation's `_save()` method.\n\n**Data Flow / Source-to-Sink Trace**:\n1. **Source**: An untrusted filename input provided by an external user (e.g. via multipart upload, REST API parameter, or `ContentFile(data, name=...)`) is passed to `Storage.save(name, content)` or `default_storage.save(name, content)`.\n2. **Sanitization/Validation (and why it fails)**:\n   - Line 31: If `name` is `None`, it takes `name = content.name`.\n   - Line 37: `name = self.get_available_name(name, max_length=max_length)` is called. Inside `get_available_name`, the path is split using `dir_name, file_name = os.path.split(name)`. It checks `if \"..\" in pathlib.PurePath(dir_name).parts` and calls `validate_file_name(file_name)`. Crucially, `validate_file_name` is only called on the isolated basename `file_name` (which succeeds for any clean filename like `exploit.php`), and `dir_name` is only checked for `..` segments. It does NOT check whether the path is absolute or otherwise invalid.\n   - The path validation check `validate_file_name(name, allow_relative_path=True)` (which checks `path.is_absolute() or \"..\" in path.parts`) is positioned on line 40, *after* `_save()` on line 38 has already executed.\n3. **Sink**: Line 38 executes `name = self._save(name, content)`. The storage backend persists the file content to the filesystem or remote storage service at the unvalidated destination path.\nEven though line 40 subsequently calls `validate_file_name(name, allow_relative_path=True)` and raises `SuspiciousFileOperation`, the file has already been written to the target path.\n\n**Conceptual Exploit Payload**:\nAn attacker uploads a file or submits input to an endpoint that saves content using Django's storage API:\n```python\n# Untrusted input supplied by attacker:\nfilename = \"/var/www/static/shell.php\"\npayload = ContentFile(b\"\u003c?php system($_GET['cmd']); ?\u003e\", name=filename)\n\n# Calling save with untrusted name or ContentFile:\nstorage.save(filename, payload)\n```\nIn `get_available_name`, `dir_name` is `\"/var/www/static\"` and `file_name` is `\"shell.php\"`. Since `\"..\"` is not in `PurePath(\"/var/www/static\").parts` and `\"shell.php\"` contains no path elements, validation passes. `self._save()` executes and writes `shell.php` to `/var/www/static/shell.php`. The subsequent `validate_file_name` call raises `SuspiciousFileOperation`, but the malicious file is already persisted on disk.",
+    "snippet": "        name = self.get_available_name(name, max_length=max_length)\n        name = self._save(name, content)\n        # Ensure that the name returned from the storage system is still valid.\n        validate_file_name(name, allow_relative_path=True)",
+    "vuln_type": "Path Traversal",
+    "vuln_id": "CWE-22",
+    "status": "OPEN",
+    "start_line": 37,
+    "end_line": 40
+  }
+]
