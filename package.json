@@ -1,8 +1,9 @@
 {
   "name": "codemender-issue-deduplication",
   "private": true,
+  "type": "module",
   "scripts": {
-    "test": "jasmine --require=ts-node/register test.ts"
+    "test": "node --loader ts-node/esm ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json"
   },
   "devDependencies": {
     "@types/jasmine": "^5.1.0",
