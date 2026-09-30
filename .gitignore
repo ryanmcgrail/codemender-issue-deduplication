@@ -1,9 +1,8 @@
 *
 
 !.gitignore
+!*.ts
 
-!code.ts
-!test.ts
 !package.json
 !package-lock.json
 !tsconfig.json

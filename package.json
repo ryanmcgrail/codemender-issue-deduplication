@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "main": "node --loader ts-node/esm main.ts",
     "test": "node --loader ts-node/esm ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json"
   },
   "devDependencies": {
