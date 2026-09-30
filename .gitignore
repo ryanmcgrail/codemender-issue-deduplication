@@ -1,0 +1,13 @@
+*
+
+!.gitignore
+
+!code.ts
+!test.ts
+!package.json
+!package-lock.json
+!tsconfig.json
+
+!results/
+!results/**/
+!results/**/findings.json
