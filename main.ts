@@ -1,20 +1,14 @@
-import {
-  Finding,
-  generateFingerprintCodeMender,
-  generateFingerprintJf,
-} from "./finding.ts";
+import { Finding, GenerateFingerprintMethod, GENERATE_FINGERPRINT_METHODS } from "./finding.ts";
 import { sessionsByVersionAndRepo } from "./sessions.ts";
-
-type FingerprintMethod = (finding: Finding) => Promise<string>;
 
 class FindingsByFingerprint {
   private impl_ = new Map<string, Finding[]>();
   private duplicateCount_ = 0;
 
-  constructor(private readonly fingerprintMethod: FingerprintMethod) {  }
+  constructor(private readonly generateFingerprint: GenerateFingerprintMethod) {  }
 
   async add(finding: Finding) {
-    const fingerprint = await this.fingerprintMethod(finding);
+    const fingerprint = await this.generateFingerprint(finding);
     if (!this.impl_.has(fingerprint)) {
       this.impl_.set(fingerprint, []);
     } else {
@@ -42,18 +36,16 @@ class FindingsByFingerprint {
   }
 }
 
-await evaluateFingerprintMethod(
-  generateFingerprintCodeMender.name,
-  generateFingerprintCodeMender,
-);
-await evaluateFingerprintMethod(
-  generateFingerprintJf.name,
-  generateFingerprintJf
-);
+for (const generateFingerprint of GENERATE_FINGERPRINT_METHODS) {
+  await evaluateFingerprintMethod(
+    generateFingerprint.name,
+    generateFingerprint,
+  );
+}
 
 async function evaluateFingerprintMethod(
   methodName: string,
-  fingerprintMethod: FingerprintMethod,
+  generateFingerprint: GenerateFingerprintMethod,
 ) {
   console.log(`Evaluating fingerprint method: ${methodName}`);
 
@@ -69,7 +61,7 @@ async function evaluateFingerprintMethod(
     if (findingsByFingerprintByRepo.has(repo)) {
       findingsByFingerprintForRepo = findingsByFingerprintByRepo.get(repo)!;
     } else {
-      findingsByFingerprintForRepo = new FindingsByFingerprint(fingerprintMethod);
+      findingsByFingerprintForRepo = new FindingsByFingerprint(generateFingerprint);
       findingsByFingerprintByRepo.set(repo, findingsByFingerprintForRepo);
     }
 
@@ -79,7 +71,7 @@ async function evaluateFingerprintMethod(
       const fingerprintsForSession = new Set<string>();
 
       for (const finding of session.findings) {
-        const fingerprint = await fingerprintMethod(finding);
+        const fingerprint = await generateFingerprint(finding);
 
         await findingsByFingerprintForRepo.add(finding);
 

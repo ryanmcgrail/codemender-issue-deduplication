@@ -1,41 +1,56 @@
-import {
-  generateFingerprintJf,
-  generateFingerprintCodeMender,
-  Finding,
-} from "./finding.ts";
+import { GENERATE_FINGERPRINT_METHODS, GenerateFingerprintMethod } from "./finding.ts";
 
-const SAMPLE_FINDING_1: Finding = {
-  filePath: "abc/xyz",
-  vulnerabilityId: "CWE-123",
-  snippet: "sample snippet",
-};
-
-const SAMPLE_FINDING_2: Finding = {
-  filePath: "foo/bar",
-  vulnerabilityId: "CWE-456",
-  snippet: "different snippet",
-};
+const GENERATE_FINGERPRINT_CASES: Record<string, GenerateFingerprintMethod> = {};
+for (const generateFingerprint of GENERATE_FINGERPRINT_METHODS) {
+  GENERATE_FINGERPRINT_CASES[generateFingerprint.name] = generateFingerprint;
+}
 
 describe("tests", () => {
   pdescribe(
     "fingerprint methods",
-    {
-      generateFingerprintCodeMender: generateFingerprintCodeMender,
-      generateFingerprintJf: generateFingerprintJf,
-    },
+    GENERATE_FINGERPRINT_CASES,
     (fingerprintMethod) => {
       pit(
         "supports obvious matches",
         {
-          "same object": {
-            lhs: SAMPLE_FINDING_1,
-            rhs: SAMPLE_FINDING_1,
+          "same finding": {
+            lhs: {
+              filePath: "abc/xyz",
+              vulnerabilityId: "CWE-123",
+              snippet: "sample snippet",
+            },
+            rhs: {
+              filePath: "abc/xyz",
+              vulnerabilityId: "CWE-123",
+              snippet: "sample snippet",
+            },
             expectedResult: true,
           },
-          "different objects": {
-            lhs: SAMPLE_FINDING_1,
-            rhs: SAMPLE_FINDING_2,
+          "different findings": {
+            lhs: {
+              filePath: "abc/xyz",
+              vulnerabilityId: "CWE-123",
+              snippet: "sample snippet",
+            },
+            rhs: {
+              filePath: "foo/bar",
+              vulnerabilityId: "CWE-456",
+              snippet: "different snippet",
+            },
             expectedResult: false,
+          },
+          "equivalent findings": {
+            lhs: {
+              filePath: "ABC\\XYZ",
+              vulnerabilityId: "CWE-80",
+              snippet: "  sample  \t \n  snippet  ",
+            },
+            rhs: {
+              filePath: "abc/xyz",
+              vulnerabilityId: "cwe-80",
+              snippet: "sample snippet",
+            },
+            expectedResult: true,
           },
         },
         async ({ lhs, rhs, expectedResult }) => {
