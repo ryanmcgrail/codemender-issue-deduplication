@@ -3,7 +3,8 @@ import {
   GenerateFingerprintMethod,
   GENERATE_FINGERPRINT_METHODS,
 } from "./generate_fingerprint.ts";
-import { sessionsByVersionAndRepo } from "./sessions.ts";
+import { sessionsByVersionAndRepo } from "./results.ts";
+import { SessionSummary } from "./session_summary.ts";
 
 class FindingsByFingerprint {
   private impl_ = new Map<string, Finding[]>();
@@ -11,8 +12,8 @@ class FindingsByFingerprint {
 
   constructor(private readonly generateFingerprint: GenerateFingerprintMethod) {  }
 
-  async add(finding: Finding) {
-    const fingerprint = await this.generateFingerprint(finding);
+  async add(finding: Finding, sessionSummary: SessionSummary) {
+    const fingerprint = await this.generateFingerprint(finding, sessionSummary);
     if (!this.impl_.has(fingerprint)) {
       this.impl_.set(fingerprint, []);
     } else {
@@ -75,9 +76,9 @@ async function evaluateFingerprintMethod(
       const fingerprintsForSession = new Set<string>();
 
       for (const finding of session.findings) {
-        const fingerprint = await generateFingerprint(finding);
+        const fingerprint = await generateFingerprint(finding, session.sessionSummary);
 
-        await findingsByFingerprintForRepo.add(finding);
+        await findingsByFingerprintForRepo.add(finding, session.sessionSummary);
 
         if (fingerprintsForVersion.has(fingerprint)) {
           duplicateCountForVersion++;

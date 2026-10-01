@@ -1,5 +1,3 @@
-import { readdir, readFile } from "node:fs/promises";
-
 import { type Finding } from "./finding.ts";
 
 interface CmFindingV1 {
@@ -44,7 +42,7 @@ function tryToNormalizeFinding(finding: any): Finding | null {
    return null;
 }
 
-function parseFindingsJson(jsonString: string): Finding[] | null {
+export function parseFindingsJson(jsonString: string): Finding[] | null {
   const cmFindings = JSON.parse(jsonString) as any[];
   if (!cmFindings) {
     return null;
@@ -56,39 +54,4 @@ function parseFindingsJson(jsonString: string): Finding[] | null {
   }
 
   return findings;
-}
-
-export interface Session {
-  path: string;
-  findings: Finding[];
-}
-
-const findingsJsonFiles: string[] = (
-  await readdir("results", { recursive: true })
-).filter((file) => file.endsWith("findings.json"));
-
-const allSessions = (
-  await Promise.all(
-    findingsJsonFiles.map(
-      async (path) => {
-        const contents = await readFile(`results/${path}`, "utf8");
-        const findings = parseFindingsJson(contents);
-        if (!!findings) {
-          return { path, findings };
-        }
-        return null;
-      }
-    ),
-  )
-)
-  .filter((o) => !!o)
-  .sort((a, b) => a.path.localeCompare(b.path));
-
-export const sessionsByVersionAndRepo = new Map<string, Session[]>();
-for (const session of allSessions) {
-  const versionAndRepo = session.path.slice(0, session.path.indexOf("/repeat"));
-  if (!sessionsByVersionAndRepo.has(versionAndRepo)) {
-    sessionsByVersionAndRepo.set(versionAndRepo, []);
-  }
-  sessionsByVersionAndRepo.get(versionAndRepo)?.push(session);
 }

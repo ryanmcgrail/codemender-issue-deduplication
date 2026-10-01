@@ -1,61 +1,109 @@
 import { GENERATE_FINGERPRINT_METHODS, GenerateFingerprintMethod } from "./generate_fingerprint.ts";
+import { Finding } from "./finding.ts";
+import { SessionSummary } from "./session_summary.ts";
 
 const GENERATE_FINGERPRINT_CASES: Record<string, GenerateFingerprintMethod> = {};
 for (const generateFingerprint of GENERATE_FINGERPRINT_METHODS) {
   GENERATE_FINGERPRINT_CASES[generateFingerprint.name] = generateFingerprint;
 }
 
+interface FindingAndSessionSummary {
+  finding: Finding;
+  sessionSummary: SessionSummary;
+}
+
 describe("tests", () => {
   pdescribe(
     "fingerprint methods",
     GENERATE_FINGERPRINT_CASES,
-    (fingerprintMethod) => {
-      pit(
+    (generateFingerprint) => {
+      pit<{
+        lhs: FindingAndSessionSummary;
+        rhs: FindingAndSessionSummary;
+        expectedResult: boolean;
+      }>(
         "supports obvious matches",
         {
           "same finding": {
             lhs: {
-              filePath: "abc/xyz",
-              vulnerabilityId: "CWE-123",
-              snippet: "sample snippet",
+              finding: {
+                filePath: "abc/xyz",
+                vulnerabilityId: "CWE-123",
+                snippet: "sample snippet",
+              },
+              sessionSummary: { working_dir: "" },
             },
             rhs: {
-              filePath: "abc/xyz",
-              vulnerabilityId: "CWE-123",
-              snippet: "sample snippet",
+              finding: {
+                filePath: "abc/xyz",
+                vulnerabilityId: "CWE-123",
+                snippet: "sample snippet",
+              },
+              sessionSummary: { working_dir: "" },
             },
             expectedResult: true,
           },
           "different findings": {
             lhs: {
-              filePath: "abc/xyz",
-              vulnerabilityId: "CWE-123",
-              snippet: "sample snippet",
+              finding: {
+                filePath: "abc/xyz",
+                vulnerabilityId: "CWE-123",
+                snippet: "sample snippet",
+              },
+              sessionSummary: { working_dir: "" },
             },
             rhs: {
-              filePath: "foo/bar",
-              vulnerabilityId: "CWE-456",
-              snippet: "different snippet",
+              finding: {
+                filePath: "foo/bar",
+                vulnerabilityId: "CWE-456",
+                snippet: "different snippet",
+              },
+              sessionSummary: { working_dir: "" },
             },
             expectedResult: false,
           },
           "equivalent findings": {
             lhs: {
-              filePath: "ABC\\XYZ",
-              vulnerabilityId: "CWE-80",
-              snippet: "  sample  \t \n  snippet  ",
+              finding: {
+                filePath: "ABC\\XYZ",
+                vulnerabilityId: "CWE-80",
+                snippet: "  sample  \t \n  snippet  ",
+              },
+              sessionSummary: { working_dir: "" },
             },
             rhs: {
-              filePath: "abc/xyz",
-              vulnerabilityId: "cwe-80",
-              snippet: "sample snippet",
+              finding: {
+                filePath: "abc/xyz",
+                vulnerabilityId: "cwe-80",
+                snippet: "sample snippet",
+              },
+              sessionSummary: { working_dir: "" },
+            },
+            expectedResult: true,
+          },
+          "equivalent paths": {
+            lhs: {
+              finding: {
+                filePath: "root/abc/xyz",
+                vulnerabilityId: "CWE-80",
+                snippet: "sample snippet",
+              },
+              sessionSummary: { working_dir: "root/" },
+            },
+            rhs: {
+              finding: {
+                filePath: "abc/xyz",
+                vulnerabilityId: "CWE-80",
+                snippet: "sample snippet",
+              },
+              sessionSummary: { working_dir: "" },
             },
             expectedResult: true,
           },
         },
         async ({ lhs, rhs, expectedResult }) => {
-          const lhsFingerprint = await fingerprintMethod(lhs);
-          const rhsFingerprint = await fingerprintMethod(rhs);
+          const lhsFingerprint = await generateFingerprint(lhs.finding, lhs.sessionSummary);
+          const rhsFingerprint = await generateFingerprint(rhs.finding, rhs.sessionSummary);
           expect(lhsFingerprint === rhsFingerprint).toBe(expectedResult);
         },
       );
