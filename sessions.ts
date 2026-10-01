@@ -28,6 +28,7 @@ function tryToNormalizeFinding(finding: any): Finding | null {
       filePath: finding.FilePath,
       vulnerabilityId: finding.VulnID,
       snippet: finding.Snippet,
+      original: finding,
     };
   } 
   
@@ -36,6 +37,7 @@ function tryToNormalizeFinding(finding: any): Finding | null {
        filePath: finding.file_path,
        vulnerabilityId: finding.vuln_id,
        snippet: finding.snippet,
+       original: finding,
      };
    }
 

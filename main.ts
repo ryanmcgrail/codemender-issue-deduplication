@@ -5,6 +5,43 @@ import {
 } from "./finding.ts";
 import { sessionsByVersionAndRepo } from "./sessions.ts";
 
+type FingerprintMethod = (finding: Finding) => Promise<string>;
+
+class FindingsByFingerprint {
+  private impl_ = new Map<string, Finding[]>();
+  private duplicateCount_ = 0;
+
+  constructor(private readonly fingerprintMethod: FingerprintMethod) {  }
+
+  async add(finding: Finding) {
+    const fingerprint = await this.fingerprintMethod(finding);
+    if (!this.impl_.has(fingerprint)) {
+      this.impl_.set(fingerprint, []);
+    } else {
+      this.duplicateCount_++;
+    }
+    this.impl_.get(fingerprint)!.push(finding);
+  }
+
+  removeSingletons() {
+    const singletonFingerprints = [...this.impl_.entries()]
+      .filter(([, value]) => value.length == 1)
+      .map(([key]) => key);
+
+    for (const singletonFingerprint of singletonFingerprints) {
+      this.impl_.delete(singletonFingerprint);
+    }
+  }
+
+  get duplicateCount(): number {
+    return this.duplicateCount_;
+  }
+
+  toString(): string {
+    return convertMapToString(this.impl_);
+  }
+}
+
 await evaluateFingerprintMethod(
   generateFingerprintCodeMender.name,
   generateFingerprintCodeMender,
@@ -16,25 +53,24 @@ await evaluateFingerprintMethod(
 
 async function evaluateFingerprintMethod(
   methodName: string,
-  fingerprintMethod: (finding: Finding) => Promise<string>,
+  fingerprintMethod: FingerprintMethod,
 ) {
   console.log(`Evaluating fingerprint method: ${methodName}`);
 
-  let duplicateCountForRepo = 0;
+  const findingsByFingerprintByRepo = new Map<string, FindingsByFingerprint>();
+
   let duplicateCountForVersion = 0;
   let duplicateCountForSingleSession = 0;
-
-  const fingerprintsByRepo = new Map<string, Set<string>>();
 
   for (const [versionAndRepo, sessions] of sessionsByVersionAndRepo) {
     const repo = versionAndRepo.split("/").pop()!;
 
-    let fingerprintsForRepo: Set<string>;
-    if (fingerprintsByRepo.has(repo)) {
-      fingerprintsForRepo = fingerprintsByRepo.get(repo)!;
+    let findingsByFingerprintForRepo: FindingsByFingerprint;
+    if (findingsByFingerprintByRepo.has(repo)) {
+      findingsByFingerprintForRepo = findingsByFingerprintByRepo.get(repo)!;
     } else {
-      fingerprintsForRepo = new Set<string>();
-      fingerprintsByRepo.set(repo, fingerprintsForRepo);
+      findingsByFingerprintForRepo = new FindingsByFingerprint(fingerprintMethod);
+      findingsByFingerprintByRepo.set(repo, findingsByFingerprintForRepo);
     }
 
     const fingerprintsForVersion = new Set<string>();
@@ -45,11 +81,7 @@ async function evaluateFingerprintMethod(
       for (const finding of session.findings) {
         const fingerprint = await fingerprintMethod(finding);
 
-        if (fingerprintsForRepo.has(fingerprint)) {
-          duplicateCountForRepo++;
-        } else {
-          fingerprintsForRepo.add(fingerprint);
-        }
+        await findingsByFingerprintForRepo.add(finding);
 
         if (fingerprintsForVersion.has(fingerprint)) {
           duplicateCountForVersion++;
@@ -66,11 +98,67 @@ async function evaluateFingerprintMethod(
     }
   }
 
-  console.log(`  Duplicate count for repos: ${duplicateCountForRepo}`);
+  for (const findingsByFingerprint of findingsByFingerprintByRepo.values()) {
+    findingsByFingerprint.removeSingletons();
+  }
+
+  console.log(
+    `  Duplicate count for repos: ${Array.from(findingsByFingerprintByRepo.values()).reduce((sum, f) => sum + f.duplicateCount, 0)}`,
+  );
   console.log(
     `  Duplicate count within the same version: ${duplicateCountForVersion}`,
   );
   console.log(
     `  Duplicate count within the same session: ${duplicateCountForSingleSession}`,
+  );
+  console.log(indentString(convertMapToString(findingsByFingerprintByRepo)));
+}
+
+function convertMapToString<TKey, TValue>(map: Map<TKey, TValue>): string {
+  let text = "{\n";
+
+  for (const [key, value] of map) {
+    text += indentString(`${key}: ${convertAnyToString(value)},`);
+  }
+
+  text += '}';
+
+  return text;
+}
+
+function convertArrayToString<T>(array: T[]): string {
+  let text = "[\n";
+
+  for (const element of array) {
+    text += indentString(`${convertAnyToString(element)},`);
+  }
+
+  text += ']';
+
+  return text;
+}
+
+function convertAnyToString<T>(obj: any): string {
+  if (obj instanceof Array) {
+    return convertArrayToString(obj);
+  }
+
+  if (obj instanceof Map) {
+    return convertMapToString(obj);
+  }
+
+  if (obj instanceof FindingsByFingerprint) {
+    return `${obj}`;
+  }
+
+  return JSON.stringify(obj, null, 2);
+}
+
+function indentString(text: string): string {
+  return (
+    text
+      .split("\n")
+      .map((line) => `  ${line}`)
+      .join("\n") + "\n"
   );
 }
