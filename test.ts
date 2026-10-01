@@ -1,4 +1,4 @@
-import { GENERATE_FINGERPRINT_METHODS, GenerateFingerprintMethod } from "./finding.ts";
+import { GENERATE_FINGERPRINT_METHODS, GenerateFingerprintMethod } from "./generate_fingerprint.ts";
 
 const GENERATE_FINGERPRINT_CASES: Record<string, GenerateFingerprintMethod> = {};
 for (const generateFingerprint of GENERATE_FINGERPRINT_METHODS) {

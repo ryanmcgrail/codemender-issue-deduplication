@@ -1,4 +1,8 @@
-import { Finding, GenerateFingerprintMethod, GENERATE_FINGERPRINT_METHODS } from "./finding.ts";
+import { Finding} from "./finding.ts";
+import {
+  GenerateFingerprintMethod,
+  GENERATE_FINGERPRINT_METHODS,
+} from "./generate_fingerprint.ts";
 import { sessionsByVersionAndRepo } from "./sessions.ts";
 
 class FindingsByFingerprint {
@@ -90,10 +94,6 @@ async function evaluateFingerprintMethod(
     }
   }
 
-  for (const findingsByFingerprint of findingsByFingerprintByRepo.values()) {
-    findingsByFingerprint.removeSingletons();
-  }
-
   console.log(
     `  Duplicate count for repos: ${Array.from(findingsByFingerprintByRepo.values()).reduce((sum, f) => sum + f.duplicateCount, 0)}`,
   );
@@ -103,7 +103,14 @@ async function evaluateFingerprintMethod(
   console.log(
     `  Duplicate count within the same session: ${duplicateCountForSingleSession}`,
   );
-  console.log(indentString(convertMapToString(findingsByFingerprintByRepo)));
+
+  if (true) {
+    for (const findingsByFingerprint of findingsByFingerprintByRepo.values()) {
+      findingsByFingerprint.removeSingletons();
+    }
+
+    console.log(indentString(convertMapToString(findingsByFingerprintByRepo)));
+  }
 }
 
 function convertMapToString<TKey, TValue>(map: Map<TKey, TValue>): string {
@@ -141,6 +148,13 @@ function convertAnyToString<T>(obj: any): string {
 
   if (obj instanceof FindingsByFingerprint) {
     return `${obj}`;
+  }
+
+  if ('snippet' in obj) {
+    const finding = obj as Finding;
+    return `{ 
+  filePath: "${finding.filePath}",
+}`;
   }
 
   return JSON.stringify(obj, null, 2);
