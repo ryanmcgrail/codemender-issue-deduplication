@@ -56,6 +56,7 @@ async function evaluateFingerprintMethod(
 
   const findingsByFingerprintByRepo = new Map<string, FindingsByFingerprint>();
 
+  let findingCount = 0;
   let duplicateCountForVersion = 0;
   let duplicateCountForSingleSession = 0;
 
@@ -77,6 +78,7 @@ async function evaluateFingerprintMethod(
 
       for (const finding of session.findings) {
         const fingerprint = await generateFingerprint(finding, session.sessionSummary);
+        ++findingCount;
 
         await findingsByFingerprintForRepo.add(finding, session.sessionSummary);
 
@@ -95,6 +97,7 @@ async function evaluateFingerprintMethod(
     }
   }
 
+  console.log(`  Total finding count for repos: ${findingCount}`);
   console.log(
     `  Duplicate count for repos: ${Array.from(findingsByFingerprintByRepo.values()).reduce((sum, f) => sum + f.duplicateCount, 0)}`,
   );
@@ -105,7 +108,7 @@ async function evaluateFingerprintMethod(
     `  Duplicate count within the same session: ${duplicateCountForSingleSession}`,
   );
 
-  if (true) {
+  if (false) {
     for (const findingsByFingerprint of findingsByFingerprintByRepo.values()) {
       findingsByFingerprint.removeSingletons();
     }

@@ -39,9 +39,17 @@ function normalizeFilePath(filePath: string): string {
 }
 
 function normalizeFilePathV2(filePath: string, rootFilePath: string): string {
-    const normalized = filePath.trim().replace(/\\/g, "/").toLowerCase();
+    let normalized = filePath.trim().replace(/\\/g, "/").toLowerCase();
+
     if (normalized.startsWith(rootFilePath)) {
-        return normalized.slice(rootFilePath.length);
+      normalized = normalized.slice(rootFilePath.length);
+    }
+
+    if (normalized.startsWith("/")) {
+      normalized = normalized.slice(1);
+    }
+    if (normalized.endsWith("/")) {
+      normalized = normalized.slice(0, -1);
     }
 
     return normalized;
@@ -72,15 +80,15 @@ async function getSha256Hash(text: string): Promise<string> {
 export type GenerateFingerprintMethod = (finding: Finding, sessionSummary: SessionSummary) => Promise<string>;
 
 export async function generateFingerprintCodeMender(finding: Finding, sessionSummary: SessionSummary): Promise<string> {
-    const normalizedFilePath = normalizeFilePath(finding.filePath);
+    const normalizedFilePath = normalizeFilePathV2(finding.filePath, sessionSummary.working_dir);
     const normalizedVulnerabilityId = normalizeVulnerabilityId(finding.vulnerabilityId);
     const normalizedSnippet = normalizeSnippet(finding.snippet);
 
     return await getSha256Hash(normalizedFilePath + normalizedVulnerabilityId + normalizedSnippet);
 }
 
-export async function generateFingerprintJf(finding: Finding, sessionSummary: Session): Promise<string> {
-    const normalizedFilePath = normalizeFilePath(finding.filePath);
+export async function generateFingerprintJf(finding: Finding, sessionSummary: SessionSummary): Promise<string> {
+    const normalizedFilePath = normalizeFilePathV2(finding.filePath, sessionSummary.working_dir);
     const vulnerabilityIdNumber = parseInt(finding.vulnerabilityId.split("-")[1]);
     const vulnerabilityFamily = CWE_FAMILY_BY_ID.get(vulnerabilityIdNumber);
     const normalizedSnippet = normalizeSnippet(finding.snippet);
@@ -89,7 +97,7 @@ export async function generateFingerprintJf(finding: Finding, sessionSummary: Se
 }
 
 export async function generateFingerprintWithoutVulnerabilityId(finding: Finding, sessionSummary: SessionSummary): Promise<string> {
-    const normalizedFilePath = normalizeFilePath(finding.filePath);
+    const normalizedFilePath = normalizeFilePathV2(finding.filePath, sessionSummary.working_dir);
     const normalizedSnippet = normalizeSnippet(finding.snippet);
 
     return await getSha256Hash(normalizedFilePath + normalizedSnippet);

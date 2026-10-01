@@ -107,8 +107,26 @@ describe("tests", () => {
           expect(lhsFingerprint === rhsFingerprint).toBe(expectedResult);
         },
       );
-    },
-  );
+
+    pit('supports different path cases', {
+        "same path after removing root": {
+          lhs: {filePath: "abc/xyz", working_dir: ''},
+          rhs: {filePath: "root/abc/xyz", working_dir: 'root/'},
+          expectedResult: true,
+        },
+        "same path after removing root, missing forward slash": {
+          lhs: {filePath: "abc/xyz", working_dir: ''},
+          rhs: {filePath: "root/abc/xyz", working_dir: 'root'},
+          expectedResult: true,
+        }
+      },
+      async ({lhs, rhs, expectedResult}) => {
+        const lhsFingerprint = await generateFingerprint({filePath: lhs.filePath, vulnerabilityId: 'CWE-123', snippet: 'foobar'}, {working_dir: lhs.working_dir});
+        const rhsFingerprint = await generateFingerprint({filePath: rhs.filePath, vulnerabilityId: 'CWE-123', snippet: 'foobar'}, {working_dir: rhs.working_dir});
+        expect(lhsFingerprint === rhsFingerprint).toBe(expectedResult);
+      }
+    );
+  });
 });
 
 function pit<T>(
