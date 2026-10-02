@@ -1,4 +1,4 @@
-import { Finding} from "./finding.ts";
+import { Finding } from "./finding.ts";
 import {
   GenerateFingerprintMethod,
   GENERATE_FINGERPRINT_METHODS,
@@ -10,7 +10,9 @@ class FindingsByFingerprint {
   private impl_ = new Map<string, Finding[]>();
   private duplicateCount_ = 0;
 
-  constructor(private readonly generateFingerprint: GenerateFingerprintMethod) {  }
+  constructor(
+    private readonly generateFingerprint: GenerateFingerprintMethod,
+  ) {}
 
   async add(finding: Finding, sessionSummary: SessionSummary) {
     const fingerprint = await this.generateFingerprint(finding, sessionSummary);
@@ -67,7 +69,9 @@ async function evaluateFingerprintMethod(
     if (findingsByFingerprintByRepo.has(repo)) {
       findingsByFingerprintForRepo = findingsByFingerprintByRepo.get(repo)!;
     } else {
-      findingsByFingerprintForRepo = new FindingsByFingerprint(generateFingerprint);
+      findingsByFingerprintForRepo = new FindingsByFingerprint(
+        generateFingerprint,
+      );
       findingsByFingerprintByRepo.set(repo, findingsByFingerprintForRepo);
     }
 
@@ -77,7 +81,10 @@ async function evaluateFingerprintMethod(
       const fingerprintsForSession = new Set<string>();
 
       for (const finding of session.findings) {
-        const fingerprint = await generateFingerprint(finding, session.sessionSummary);
+        const fingerprint = await generateFingerprint(
+          finding,
+          session.sessionSummary,
+        );
         ++findingCount;
 
         await findingsByFingerprintForRepo.add(finding, session.sessionSummary);
@@ -124,7 +131,7 @@ function convertMapToString<TKey, TValue>(map: Map<TKey, TValue>): string {
     text += indentString(`${key}: ${convertAnyToString(value)},`);
   }
 
-  text += '}';
+  text += "}";
 
   return text;
 }
@@ -136,7 +143,7 @@ function convertArrayToString<T>(array: T[]): string {
     text += indentString(`${convertAnyToString(element)},`);
   }
 
-  text += ']';
+  text += "]";
 
   return text;
 }
@@ -154,7 +161,7 @@ function convertAnyToString<T>(obj: any): string {
     return `${obj}`;
   }
 
-  if ('snippet' in obj) {
+  if ("snippet" in obj) {
     const finding = obj as Finding;
     return `{ 
   filePath: "${finding.filePath}",
