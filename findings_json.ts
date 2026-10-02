@@ -12,12 +12,33 @@ function isCmFindingV1(finding: any): finding is CmFindingV1 {
 
 interface CmFindingV2 {
   file_path: string;
-  vuln_id: string;
+  vuln_id?: string;
+  vuln_type?: string;
   snippet: string;
 }
 
+interface CmFindingV3 {
+  file: string;
+  type?: string;
+  snippet?: string;
+}
+
 function isCmFindingV2(finding: any): finding is CmFindingV2 {
-  return "snippet" in finding && "vuln_id" in finding && "file_path" in finding;
+  return (
+    finding !== null &&
+    typeof finding === "object" &&
+    typeof finding.file_path === "string" &&
+    typeof finding.snippet === "string"
+  );
+}
+
+function isCmFindingV3(finding: any): finding is CmFindingV3 {
+  return (
+    finding !== null &&
+    typeof finding === "object" &&
+    typeof finding.file === "string" &&
+    (finding.snippet === undefined || typeof finding.snippet === "string")
+  );
 }
 
 function tryToNormalizeFinding(finding: any): Finding | null {
@@ -33,11 +54,20 @@ function tryToNormalizeFinding(finding: any): Finding | null {
   if (isCmFindingV2(finding)) {
      return {
        filePath: finding.file_path,
-       vulnerabilityId: finding.vuln_id,
+      vulnerabilityId: finding.vuln_id ?? finding.vuln_type ?? "",
        snippet: finding.snippet,
        original: finding,
      };
    }
+
+  if (isCmFindingV3(finding)) {
+    return {
+      filePath: finding.file,
+      vulnerabilityId: finding.type ?? "",
+      snippet: finding.snippet ?? "",
+      original: finding,
+    };
+  }
 
    return null;
 }

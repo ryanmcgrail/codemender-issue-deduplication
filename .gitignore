@@ -2,6 +2,7 @@
 
 !.gitignore
 !*.ts
+!findings_database.json
 
 !package.json
 !package-lock.json

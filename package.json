@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "main": "node --loader ts-node/esm main.ts",
+    "database": "node --loader ts-node/esm build_findings_database.ts",
     "test": "node --loader ts-node/esm ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json"
   },
   "devDependencies": {
